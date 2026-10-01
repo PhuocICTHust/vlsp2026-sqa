@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Virtual env
+.venv/
+venv/
+
+# PyCharm
+.idea/
+
+# Data & model artifacts — KHÔNG commit audio/checkpoint/cache lên git
+# (đặc biệt: KHÔNG bao giờ commit raw audio phần BVCC của QualiSpeech — xem
+# README mục "License")
+data/
+runs/
+cache/
+*.wav
+*.flac
+*.pt
+*.ckpt
+*.npz
+
+# OS
+.DS_Store
