@@ -15,90 +15,157 @@ class QualiSpeechDataset(Dataset):
     def __init__(
         self,
         csv_path: str | Path,
-        zip_path: str | Path,
+        zip_path: str | Path | None = None,
+        wav_dir: str | Path | None = None,
         quality_column: str = "Overall quality",
         indices: List[int] | None = None,
     ):
         self.csv_path = Path(csv_path)
-        self.zip_path = Path(zip_path)
         self.quality_column = quality_column
 
         if not self.csv_path.exists():
             raise FileNotFoundError(f"CSV not found: {self.csv_path}")
 
-        if not self.zip_path.exists():
-            raise FileNotFoundError(f"ZIP not found: {self.zip_path}")
+        if zip_path is None and wav_dir is None:
+            raise ValueError(
+                "Provide either zip_path or wav_dir."
+            )
+
+        if zip_path is not None and wav_dir is not None:
+            raise ValueError(
+                "Provide only one of zip_path or wav_dir."
+            )
+
+        self.zip_path = Path(zip_path) if zip_path is not None else None
+        self.wav_dir = Path(wav_dir) if wav_dir is not None else None
+
+        if self.zip_path is not None:
+            if not self.zip_path.exists():
+                raise FileNotFoundError(
+                    f"ZIP not found: {self.zip_path}"
+                )
+            self.source_type = "zip"
+        else:
+            if not self.wav_dir.exists():
+                raise FileNotFoundError(
+                    f"WAV directory not found: {self.wav_dir}"
+                )
+            self.source_type = "directory"
 
         self.df = pd.read_csv(self.csv_path)
 
         required_columns = {"id", quality_column}
         missing_columns = required_columns - set(self.df.columns)
+
         if missing_columns:
             raise ValueError(
-                f"Missing columns in {self.csv_path}: {sorted(missing_columns)}"
+                f"Missing columns in {self.csv_path}: "
+                f"{sorted(missing_columns)}"
             )
 
-        # Open ZIP once in the main process.
-        # For DataLoader(num_workers=0), this is ideal.
-        self._zip = zipfile.ZipFile(self.zip_path, "r")
+        # ------------------------------------------------------------
+        # Build audio index
+        # ------------------------------------------------------------
 
-        # Build basename -> ZIP member mapping.
-        #
-        # The ZIP contains paths such as:
-        #   wav/test/sys01tts-0000068.wav
-        #   wav/val/sysnisvs-0000825.wav
-        #
-        # CSV only contains:
-        #   sys01tts-0000068.wav
+        self._zip = None
         self._zip_members: Dict[str, str] = {}
+        self._wav_files: Dict[str, Path] = {}
 
-        for member in self._zip.namelist():
-            if not member.lower().endswith(".wav"):
-                continue
+        if self.source_type == "zip":
+            # Open ZIP once in the main process.
+            self._zip = zipfile.ZipFile(self.zip_path, "r")
 
-            basename = Path(member).name
+            for member in self._zip.namelist():
+                if not member.lower().endswith(".wav"):
+                    continue
 
-            if basename in self._zip_members:
-                raise ValueError(
-                    f"Duplicate WAV basename in ZIP: {basename}\n"
-                    f"Existing: {self._zip_members[basename]}\n"
-                    f"New:      {member}"
-                )
+                basename = Path(member).name
 
-            self._zip_members[basename] = member
+                if basename in self._zip_members:
+                    raise ValueError(
+                        f"Duplicate WAV basename in ZIP: {basename}\n"
+                        f"Existing: {self._zip_members[basename]}\n"
+                        f"New:      {member}"
+                    )
 
-        # Keep only rows whose audio actually exists in this ZIP.
-        available_mask = self.df["id"].isin(self._zip_members.keys())
+                self._zip_members[basename] = member
+
+            available_mask = self.df["id"].isin(
+                self._zip_members.keys()
+            )
+
+        else:
+            # Directory mode.
+            #
+            # Expected:
+            #   data/qualispeech/wav/
+            #       file_001.wav
+            #       file_002.wav
+            #       ...
+            #
+            # Build basename -> actual path.
+            for wav_path in self.wav_dir.glob("*.wav"):
+                basename = wav_path.name
+
+                if basename in self._wav_files:
+                    raise ValueError(
+                        f"Duplicate WAV basename in directory: "
+                        f"{basename}"
+                    )
+
+                self._wav_files[basename] = wav_path
+
+            available_mask = self.df["id"].isin(
+                self._wav_files.keys()
+            )
+
+        # ------------------------------------------------------------
+        # Keep only rows whose audio actually exists
+        # ------------------------------------------------------------
+
         available_df = self.df.loc[available_mask].copy()
 
         if available_df.empty:
             raise RuntimeError(
-                "No CSV rows have matching audio in the ZIP."
+                "No CSV rows have matching audio."
             )
 
         available_df = available_df.reset_index(drop=True)
 
         if indices is not None:
             if len(indices) == 0:
-                raise ValueError("indices must not be empty.")
+                raise ValueError(
+                    "indices must not be empty."
+                )
 
             if min(indices) < 0 or max(indices) >= len(available_df):
                 raise IndexError(
-                    f"indices must be in [0, {len(available_df) - 1}]"
+                    f"indices must be in [0, "
+                    f"{len(available_df) - 1}]"
                 )
 
-            available_df = available_df.iloc[indices].reset_index(drop=True)
+            available_df = (
+                available_df
+                .iloc[indices]
+                .reset_index(drop=True)
+            )
 
         self.df = available_df
 
         # Statistics useful for diagnostics.
-        self.total_csv_rows = len(pd.read_csv(self.csv_path))
+        self.total_csv_rows = len(
+            pd.read_csv(self.csv_path)
+        )
         self.available_rows = len(self.df)
 
     def __len__(self) -> int:
         return len(self.df)
 
-    def _decode_wav(self, wav_bytes: bytes) -> Tuple[torch.Tensor, int]:
+    def _decode_wav(
+        self,
+        wav_bytes: bytes,
+    ) -> Tuple[torch.Tensor, int]:
+
         with wave.open(io.BytesIO(wav_bytes), "rb") as wav:
             sample_rate = wav.getframerate()
             num_channels = wav.getnchannels()
@@ -122,7 +189,9 @@ class QualiSpeechDataset(Dataset):
                 dtype=torch.uint8,
             ).clone().float()
 
-            waveform = (waveform - 128.0) / 128.0
+            waveform = (
+                waveform - 128.0
+            ) / 128.0
 
         elif sample_width == 4:
             # Signed int32 PCM.
@@ -141,7 +210,10 @@ class QualiSpeechDataset(Dataset):
 
         # [T * channels] -> [T, channels]
         if num_channels > 1:
-            waveform = waveform.view(-1, num_channels)
+            waveform = waveform.view(
+                -1,
+                num_channels,
+            )
 
             # Downmix to mono.
             waveform = waveform.mean(dim=1)
@@ -157,19 +229,41 @@ class QualiSpeechDataset(Dataset):
         file_id = str(row["id"])
         target = float(row[self.quality_column])
 
-        if file_id not in self._zip_members:
-            raise KeyError(
-                f"Audio {file_id!r} is not present in ZIP."
-            )
+        # ------------------------------------------------------------
+        # Read audio
+        # ------------------------------------------------------------
 
-        member = self._zip_members[file_id]
+        if self.source_type == "zip":
 
-        wav_bytes = self._zip.read(member)
-        waveform, sample_rate = self._decode_wav(wav_bytes)
+            if file_id not in self._zip_members:
+                raise KeyError(
+                    f"Audio {file_id!r} "
+                    f"is not present in ZIP."
+                )
 
-        # QualiSpeech archive inspected above is 16 kHz mono.
-        # Keep this as an explicit invariant rather than silently
-        # resampling inside Dataset.
+            member = self._zip_members[file_id]
+
+            wav_bytes = self._zip.read(member)
+
+        else:
+
+            if file_id not in self._wav_files:
+                raise KeyError(
+                    f"Audio {file_id!r} "
+                    f"is not present in directory."
+                )
+
+            wav_path = self._wav_files[file_id]
+
+            wav_bytes = wav_path.read_bytes()
+
+        waveform, sample_rate = self._decode_wav(
+            wav_bytes
+        )
+
+        # QualiSpeech audio is expected to be 16 kHz.
+        # Keep this as an explicit invariant rather than
+        # silently resampling inside Dataset.
         if sample_rate != 16000:
             raise ValueError(
                 f"Unexpected sample rate for {file_id}: "
@@ -177,17 +271,23 @@ class QualiSpeechDataset(Dataset):
             )
 
         if waveform.numel() == 0:
-            raise ValueError(f"Empty audio: {file_id}")
+            raise ValueError(
+                f"Empty audio: {file_id}"
+            )
 
         return {
             "wav": waveform,
-            "target": torch.tensor(target, dtype=torch.float32),
+            "target": torch.tensor(
+                target,
+                dtype=torch.float32,
+            ),
             "file_id": file_id,
             "sample_rate": sample_rate,
         }
 
     def close(self):
         """Close the underlying ZIP file."""
+
         if getattr(self, "_zip", None) is not None:
             self._zip.close()
             self._zip = None
@@ -203,15 +303,29 @@ def qualispeech_collate(batch):
     if not batch:
         raise ValueError("Empty batch.")
 
-    waveforms = [item["wav"] for item in batch]
-    targets = torch.stack([item["target"] for item in batch])
+    waveforms = [
+        item["wav"]
+        for item in batch
+    ]
+
+    targets = torch.stack(
+        [
+            item["target"]
+            for item in batch
+        ]
+    )
 
     lengths = torch.tensor(
-        [wav.numel() for wav in waveforms],
+        [
+            wav.numel()
+            for wav in waveforms
+        ],
         dtype=torch.long,
     )
 
-    max_length = int(lengths.max().item())
+    max_length = int(
+        lengths.max().item()
+    )
 
     padded = torch.zeros(
         len(waveforms),
@@ -236,5 +350,8 @@ def qualispeech_collate(batch):
         "attention_mask": attention_mask,
         "lengths": lengths,
         "target": targets,
-        "file_id": [item["file_id"] for item in batch],
+        "file_id": [
+            item["file_id"]
+            for item in batch
+        ],
     }

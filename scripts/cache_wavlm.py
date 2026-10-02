@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import sys
-import zipfile
 from pathlib import Path
 
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
+
 
 # ============================================================================
 # PATHS
@@ -23,9 +23,9 @@ from sqa.model import WavLMBackbone
 
 
 CSV_PATH = ROOT / "data" / "qualispeech" / "train.csv"
-ZIP_PATH = ROOT / "data" / "qualispeech" / "wav_part1.zip"
-
+WAV_DIR = ROOT / "data" / "qualispeech" / "wav"
 CACHE_ROOT = ROOT / "data" / "qualispeech" / "wavlm_cache"
+
 
 # ============================================================================
 # CONFIG
@@ -33,9 +33,8 @@ CACHE_ROOT = ROOT / "data" / "qualispeech" / "wavlm_cache"
 
 SEED = 42
 
-# IMPORTANT:
-# First run = True.
-# After tiny cache verification passes, change to False.
+# True  -> only cache the 16-sample tiny subset
+# False -> cache all 10,558 training samples
 CACHE_TINY_ONLY = False
 
 SAMPLES_PER_CLASS = {
@@ -48,8 +47,7 @@ SAMPLES_PER_CLASS = {
 
 BATCH_SIZE = 4
 
-# WavLM is frozen, so gradients are not needed.
-# Keep num_workers=0 for maximum Windows compatibility.
+# Keep 0 for Windows compatibility.
 NUM_WORKERS = 0
 
 DEVICE = torch.device(
@@ -58,10 +56,13 @@ DEVICE = torch.device(
 
 MODEL_NAME = "microsoft/wavlm-large"
 
+# WavLM-Large hidden size.
+EXPECTED_HIDDEN_SIZE = 1024
+
+
 # ============================================================================
 # REPRODUCIBILITY
 # ============================================================================
-
 
 def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
@@ -71,115 +72,45 @@ def set_seed(seed: int) -> None:
 
 
 # ============================================================================
-# ZIP INDEX
-# ============================================================================
-
-
-def build_zip_index(zip_path: Path) -> dict[str, str]:
-    """
-    Build:
-        normalized filename -> actual ZIP member name
-
-    This lets us handle different path separators/casing inside the ZIP.
-    """
-
-    print()
-    print("Indexing ZIP...")
-
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        names = zf.namelist()
-
-    index: dict[str, str] = {}
-
-    for name in names:
-        if name.endswith("/"):
-            continue
-
-        normalized = Path(name).name.lower()
-
-        # If duplicate basenames exist, keep the first one.
-        if normalized not in index:
-            index[normalized] = name
-
-    print(f"ZIP files indexed: {len(index)}")
-
-    return index
-
-
-# ============================================================================
 # TINY SUBSET
 # ============================================================================
 
-
 def build_tiny_indices(
     df: pd.DataFrame,
-    zip_index: dict[str, str],
-) -> list[int]:
-    """
-    Select the same 16-sample stratified subset used in
-    run_real_tiny_overfit.py.
+    wav_files: set[str],
+) -> pd.DataFrame:
 
-    Distribution:
-        quality 1 -> 3
-        quality 2 -> 3
-        quality 3 -> 4
-        quality 4 -> 3
-        quality 5 -> 3
-    """
+    selected = []
 
-    required = SAMPLES_PER_CLASS
+    for quality, n in SAMPLES_PER_CLASS.items():
 
-    selected: list[int] = []
+        candidates = df[
+            (df["Overall quality"] == quality)
+            & (df["id"].astype(str).isin(wav_files))
+        ]
 
-    # Use the same column names expected by the current dataset.
-    id_col = "id"
-    target_col = "Overall quality"
-
-    if id_col not in df.columns:
-        raise KeyError(
-            f"Missing column '{id_col}'. "
-            f"Available columns: {list(df.columns)}"
+        selected.append(
+            candidates.head(n)
         )
 
-    if target_col not in df.columns:
-        raise KeyError(
-            f"Missing column '{target_col}'. "
-            f"Available columns: {list(df.columns)}"
+    tiny_df = (
+        pd.concat(selected)
+        .drop_duplicates(subset=["id"])
+        .reset_index(drop=True)
+    )
+
+    if len(tiny_df) != 16:
+        raise RuntimeError(
+            f"Tiny dataset should contain 16 samples, "
+            f"got {len(tiny_df)}"
         )
 
-    for quality, count in required.items():
-        candidates = []
-
-        for idx, row in df.iterrows():
-            file_id = str(row[id_col])
-            key = Path(file_id).name.lower()
-
-            if key not in zip_index:
-                continue
-
-            try:
-                target = float(row[target_col])
-            except (TypeError, ValueError):
-                continue
-
-            if target == quality:
-                candidates.append(idx)
-
-        if len(candidates) < count:
-            raise RuntimeError(
-                f"Not enough samples for quality={quality}. "
-                f"Required={count}, found={len(candidates)}."
-            )
-
-        selected.extend(candidates[:count])
-
-    return selected
+    return tiny_df
 
 
 # ============================================================================
 # CACHE PATH
 # ============================================================================
-
 
 def cache_path_for_file(file_id: str) -> Path:
     """
@@ -200,7 +131,6 @@ def cache_path_for_file(file_id: str) -> Path:
 # SAVE CACHE
 # ============================================================================
 
-
 def save_cache(
     path: Path,
     hidden: torch.Tensor,
@@ -208,14 +138,6 @@ def save_cache(
     target: torch.Tensor,
     file_id: str,
 ) -> None:
-    """
-    Save CPU tensors only.
-
-    This is intentional:
-        - cache should not depend on GPU
-        - easier to reload later
-        - no unnecessary CUDA memory usage
-    """
 
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -230,19 +152,13 @@ def save_cache(
 
 
 # ============================================================================
-# LOAD / VERIFY EXISTING CACHE
+# VERIFY EXISTING CACHE
 # ============================================================================
-
 
 def verify_cache_file(
     path: Path,
     expected_hidden_size: int,
 ) -> dict:
-    """
-    Verify one cache file.
-
-    Returns metadata useful for logging.
-    """
 
     payload = torch.load(
         path,
@@ -320,8 +236,8 @@ def verify_cache_file(
 # MAIN
 # ============================================================================
 
-
 def main() -> None:
+
     set_seed(SEED)
 
     print("=" * 72)
@@ -330,20 +246,24 @@ def main() -> None:
 
     print(f"Device:       {DEVICE}")
     print(f"CSV:          {CSV_PATH}")
-    print(f"ZIP:          {ZIP_PATH}")
+    print(f"WAV directory:{WAV_DIR}")
     print(f"Cache:        {CACHE_ROOT}")
     print(f"Model:        {MODEL_NAME}")
     print(f"Tiny only:    {CACHE_TINY_ONLY}")
     print()
+
+    # ------------------------------------------------------------------------
+    # Check paths
+    # ------------------------------------------------------------------------
 
     if not CSV_PATH.exists():
         raise FileNotFoundError(
             f"CSV not found:\n{CSV_PATH}"
         )
 
-    if not ZIP_PATH.exists():
+    if not WAV_DIR.exists():
         raise FileNotFoundError(
-            f"ZIP not found:\n{ZIP_PATH}"
+            f"WAV directory not found:\n{WAV_DIR}"
         )
 
     # ------------------------------------------------------------------------
@@ -352,308 +272,357 @@ def main() -> None:
 
     df = pd.read_csv(CSV_PATH)
 
-    print(f"CSV rows: {len(df)}")
+    print(f"CSV rows:     {len(df)}")
 
     # ------------------------------------------------------------------------
-    # Build ZIP index
+    # Index WAV files
     # ------------------------------------------------------------------------
 
-    zip_index = build_zip_index(ZIP_PATH)
+    wav_files = {
+        p.name
+        for p in WAV_DIR.glob("*.wav")
+    }
+
+    print(f"WAV files:    {len(wav_files)}")
+
+    # ------------------------------------------------------------------------
+    # Check audio coverage
+    # ------------------------------------------------------------------------
+
+    missing_audio = sorted(
+        set(df["id"].astype(str))
+        - wav_files
+    )
+
+    if missing_audio:
+        raise RuntimeError(
+            f"Missing {len(missing_audio)} audio files.\n"
+            f"First examples: {missing_audio[:10]}"
+        )
+
+    extra_audio = sorted(
+        wav_files
+        - set(df["id"].astype(str))
+    )
+
+    if extra_audio:
+        print(
+            f"WARNING: {len(extra_audio)} WAV files "
+            f"are not referenced by train.csv."
+        )
 
     # ------------------------------------------------------------------------
     # Determine samples
     # ------------------------------------------------------------------------
 
     if CACHE_TINY_ONLY:
-        tiny_indices = build_tiny_indices(df, zip_index)
 
-        work_df = df.iloc[tiny_indices].copy()
-
-        print()
-        print("TINY CACHE SUBSET:")
-        print(
-            work_df[
-                ["id", "Overall quality"]
-            ].to_string(index=False)
-        )
-
-        print()
-        print("Tiny target distribution:")
-        print(
-            work_df["Overall quality"]
-            .value_counts()
-            .sort_index()
-            .to_string()
+        work_df = build_tiny_indices(
+            df,
+            wav_files,
         )
 
     else:
 
-        valid_indices = []
-
-        for idx, row in df.iterrows():
-
-            file_id = str(row["id"])
-
-            key = Path(file_id).name.lower()
-
-            if key in zip_index:
-                valid_indices.append(idx)
-
-    # IMPORTANT:
-
-    # QualiSpeechDataset expects positional indices in the
-
-    # filtered dataframe, not the original CSV indices.
-
         work_df = (
+            df.copy()
+            .reset_index(drop=True)
+        )
 
-        df.iloc[valid_indices]
+    print()
+    print(f"Samples selected: {len(work_df)}")
 
-        .copy()
+    # ------------------------------------------------------------------------
+    # Cache directory
+    # ------------------------------------------------------------------------
 
-        .reset_index(drop=True)
+    CACHE_ROOT.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
+    # ------------------------------------------------------------------------
+    # Determine which caches are already valid
+    #
+    # IMPORTANT:
+    # We do this BEFORE loading WavLM / DataLoader so that
+    # existing caches are NOT recomputed.
+    # ------------------------------------------------------------------------
+
+    valid_cache_ids = []
+    pending_ids = []
+
+    for file_id in work_df["id"].astype(str):
+
+        cache_path = cache_path_for_file(file_id)
+
+        if not cache_path.exists():
+
+            pending_ids.append(file_id)
+            continue
+
+        try:
+
+            info = verify_cache_file(
+                cache_path,
+                expected_hidden_size=EXPECTED_HIDDEN_SIZE,
+            )
+
+            # Verify file_id consistency too.
+            if info["file_id"] != file_id:
+                raise RuntimeError(
+                    f"file_id mismatch: "
+                    f"cache={info['file_id']} "
+                    f"expected={file_id}"
+                )
+
+            valid_cache_ids.append(file_id)
+
+        except Exception as exc:
+
+            print(
+                f"Invalid cache -> recompute: "
+                f"{cache_path.name}"
+            )
+            print(f"  Reason: {exc}")
+
+            pending_ids.append(file_id)
+
+    print()
+    print(f"Valid existing cache: {len(valid_cache_ids)}")
+    print(f"Need WavLM extraction: {len(pending_ids)}")
+
+    # ------------------------------------------------------------------------
+    # If everything is already cached, no need to load WavLM.
+    # ------------------------------------------------------------------------
+
+    if not pending_ids:
+
+        print()
+        print("All requested cache files are already valid.")
+        print("Skipping WavLM extraction.")
+
+        hidden_size = EXPECTED_HIDDEN_SIZE
+
+    else:
+
+        # --------------------------------------------------------------------
+        # Build dataframe containing ONLY pending samples
+        # --------------------------------------------------------------------
+
+        pending_set = set(pending_ids)
+
+        pending_df = work_df[
+            work_df["id"].astype(str).isin(pending_set)
+        ].copy()
+
+        pending_df = pending_df.reset_index(drop=True)
+
+        # --------------------------------------------------------------------
+        # Dataset
+        # --------------------------------------------------------------------
+
+        dataset = QualiSpeechDataset(
+            csv_path=CSV_PATH,
+            wav_dir=WAV_DIR,
+            indices=pending_df.index.tolist(),
         )
 
         print()
+        print(f"Pending dataset: {len(dataset)}")
 
-        print(f"Samples with ZIP audio: {len(work_df)}")
+        # --------------------------------------------------------------------
+        # Load frozen WavLM
+        # --------------------------------------------------------------------
 
+        print()
+        print("Loading frozen WavLM...")
 
+        backbone = WavLMBackbone(
+            model_name=MODEL_NAME,
+            freeze=True,
+        ).to(DEVICE)
 
-# ------------------------------------------------------------------------
-    # Build Dataset
-    # ------------------------------------------------------------------------
+        backbone.eval()
 
-    # We construct the dataset using exactly the selected rows.
-    #
-    # The dataset is responsible for:
-    #   - reading audio from ZIP
-    #   - resampling / preprocessing
-    #   - constructing waveform attention mask
-    #
-    # The cache script does NOT duplicate audio preprocessing logic.
-    dataset = QualiSpeechDataset(
-        csv_path=CSV_PATH,
-        zip_path=ZIP_PATH,
-        indices=work_df.index.tolist(),
-    )
+        hidden_size = backbone.hidden_size
 
-    print()
-    print(f"Dataset samples: {len(dataset)}")
+        print(f"WavLM hidden size: {hidden_size}")
 
-    # ------------------------------------------------------------------------
-    # Load frozen WavLM
-    # ------------------------------------------------------------------------
+        # --------------------------------------------------------------------
+        # Verify WavLM frozen
+        # --------------------------------------------------------------------
 
-    print()
-    print("Loading frozen WavLM...")
+        trainable_backbone = [
+            name
+            for name, parameter in backbone.named_parameters()
+            if parameter.requires_grad
+        ]
 
-    backbone = WavLMBackbone(
-        model_name=MODEL_NAME,
-        freeze=True,
-    ).to(DEVICE)
+        if trainable_backbone:
+            raise RuntimeError(
+                "WavLM is not fully frozen. "
+                f"Trainable parameters found: "
+                f"{trainable_backbone[:10]}"
+            )
 
-    backbone.eval()
+        print("WavLM parameters: FROZEN")
 
-    hidden_size = backbone.hidden_size
+        # --------------------------------------------------------------------
+        # DataLoader
+        # --------------------------------------------------------------------
 
-    print(f"WavLM hidden size: {hidden_size}")
-
-    # Verify every backbone parameter is frozen.
-    trainable_backbone = [
-        name
-        for name, parameter in backbone.named_parameters()
-        if parameter.requires_grad
-    ]
-
-    if trainable_backbone:
-        raise RuntimeError(
-            "WavLM is not fully frozen. "
-            f"Trainable parameters found: {trainable_backbone[:10]}"
+        loader = DataLoader(
+            dataset,
+            batch_size=BATCH_SIZE,
+            shuffle=False,
+            num_workers=NUM_WORKERS,
+            collate_fn=qualispeech_collate,
         )
 
-    print("WavLM parameters: FROZEN")
+        # --------------------------------------------------------------------
+        # Feature extraction
+        # --------------------------------------------------------------------
 
-    # ------------------------------------------------------------------------
-    # DataLoader
-    # ------------------------------------------------------------------------
+        print()
+        print("Starting WavLM feature extraction...")
+        print()
 
-    loader = DataLoader(
-        dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=False,
-        num_workers=NUM_WORKERS,
-        collate_fn=qualispeech_collate,
-    )
+        saved = 0
+        total_frames = 0
 
-    # ------------------------------------------------------------------------
-    # Cache
-    # ------------------------------------------------------------------------
+        with torch.no_grad():
 
-    CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+            for batch_idx, batch in enumerate(
+                loader,
+                start=1,
+            ):
 
-    print()
-    print("Starting WavLM feature extraction...")
-    print()
-
-    saved = 0
-    skipped = 0
-    total_frames = 0
-
-    with torch.no_grad():
-
-        for batch_idx, batch in enumerate(loader, start=1):
-
-            wav = batch["wav"].to(
-                DEVICE,
-                non_blocking=True,
-            )
-
-            attention_mask = batch["attention_mask"].to(
-                DEVICE,
-                non_blocking=True,
-            )
-
-            target = batch["target"]
-
-            file_ids = batch["file_id"]
-
-            # ---------------------------------------------------------------
-            # WavLM
-            # ---------------------------------------------------------------
-
-            hidden = backbone(
-                wav,
-                attention_mask=attention_mask,
-            )
-
-            # hidden:
-            #   [B, T, H]
-            #
-            # Note:
-            #   T can differ conceptually by audio length.
-            #   The collate function pads the batch to a common T.
-            #
-            # We calculate the real frame-level mask to identify
-            # non-padding WavLM frames.
-
-            valid_mask = backbone.frame_valid_mask(
-                attention_mask
-            )
-
-            if hidden.ndim != 3:
-                raise RuntimeError(
-                    f"Expected hidden [B,T,H], "
-                    f"got {tuple(hidden.shape)}"
+                wav = batch["wav"].to(
+                    DEVICE,
+                    non_blocking=True,
                 )
 
-            if hidden.shape[0] != len(file_ids):
-                raise RuntimeError(
-                    f"Batch mismatch: hidden B={hidden.shape[0]}, "
-                    f"file_ids={len(file_ids)}"
+                attention_mask = batch["attention_mask"].to(
+                    DEVICE,
+                    non_blocking=True,
                 )
 
-            if hidden.shape[1] != valid_mask.shape[1]:
-                raise RuntimeError(
-                    f"Frame mismatch: hidden T={hidden.shape[1]}, "
-                    f"valid_mask T={valid_mask.shape[1]}"
+                target = batch["target"]
+                file_ids = batch["file_id"]
+
+                # ------------------------------------------------------------
+                # WavLM
+                # ------------------------------------------------------------
+
+                hidden = backbone(
+                    wav,
+                    attention_mask=attention_mask,
                 )
 
-            if hidden.shape[2] != hidden_size:
-                raise RuntimeError(
-                    f"Hidden size mismatch: "
-                    f"{hidden.shape[2]} != {hidden_size}"
+                valid_mask = backbone.frame_valid_mask(
+                    attention_mask
                 )
 
-            # ---------------------------------------------------------------
-            # Save each audio independently
-            # ---------------------------------------------------------------
+                # ------------------------------------------------------------
+                # Shape checks
+                # ------------------------------------------------------------
 
-            for i, file_id in enumerate(file_ids):
-
-                file_target = target[i]
-
-                cache_path = cache_path_for_file(file_id)
-
-                # Do not overwrite an already valid cache file.
-                if cache_path.exists():
-                    try:
-                        verify_cache_file(
-                            cache_path,
-                            expected_hidden_size=hidden_size,
-                        )
-                        skipped += 1
-                        continue
-
-                    except Exception:
-                        # Existing cache is invalid.
-                        # Recompute and overwrite it.
-                        print(
-                            f"  Invalid cache -> recomputing: "
-                            f"{cache_path.name}"
-                        )
-
-                # Keep only REAL WavLM frames.
-                #
-                # hidden[i] is padded to the maximum frame length of the batch.
-                # valid_mask[i] has the same batch-level frame length.
-                #
-                # We remove padding BEFORE saving so that:
-                #     hidden      = [T_real, H]
-                #     valid_mask  = [T_real]
-                #
-                # After trimming, every remaining frame is valid.
-                sample_valid = valid_mask[i].bool()
-
-                sample_hidden = hidden[i][sample_valid]
-
-                sample_mask = torch.ones(
-                    sample_hidden.shape[0],
-                    dtype=torch.bool,
-                    device=sample_hidden.device,
-                )
-
-                if sample_hidden.ndim != 2:
+                if hidden.ndim != 3:
                     raise RuntimeError(
-                        f"{file_id}: expected [T,H], "
-                        f"got {tuple(sample_hidden.shape)}"
+                        f"Expected hidden [B,T,H], "
+                        f"got {tuple(hidden.shape)}"
                     )
 
-                if sample_hidden.shape[0] == 0:
+                if hidden.shape[0] != len(file_ids):
                     raise RuntimeError(
-                        f"{file_id}: zero valid WavLM frames."
+                        f"Batch mismatch: "
+                        f"hidden B={hidden.shape[0]}, "
+                        f"file_ids={len(file_ids)}"
                     )
 
-                save_cache(
-                    path=cache_path,
-                    hidden=sample_hidden,
-                    valid_mask=sample_mask,
-                    target=file_target,
-                    file_id=file_id,
-                )
+                if hidden.shape[1] != valid_mask.shape[1]:
+                    raise RuntimeError(
+                        f"Frame mismatch: "
+                        f"hidden T={hidden.shape[1]}, "
+                        f"valid_mask T={valid_mask.shape[1]}"
+                    )
 
-                saved += 1
-                total_frames += sample_hidden.shape[0]
+                if hidden.shape[2] != hidden_size:
+                    raise RuntimeError(
+                        f"Hidden size mismatch: "
+                        f"{hidden.shape[2]} != {hidden_size}"
+                    )
 
-                print(
-                    f"[{saved + skipped:4d}/{len(dataset):4d}] "
-                    f"{file_id:<36} "
-                    f"hidden={tuple(sample_hidden.shape)} "
-                    f"target={float(file_target):.1f}"
-                )
+                # ------------------------------------------------------------
+                # Save each sample
+                # ------------------------------------------------------------
 
-            # ---------------------------------------------------------------
-            # GPU memory cleanup
-            # ---------------------------------------------------------------
+                for i, file_id in enumerate(file_ids):
 
-            del wav
-            del attention_mask
-            del hidden
-            del valid_mask
+                    file_target = target[i]
 
-            if DEVICE.type == "cuda":
-                torch.cuda.empty_cache()
+                    cache_path = cache_path_for_file(
+                        file_id
+                    )
+
+                    sample_valid = valid_mask[i].bool()
+
+                    sample_hidden = hidden[i][sample_valid]
+
+                    sample_mask = torch.ones(
+                        sample_hidden.shape[0],
+                        dtype=torch.bool,
+                        device=sample_hidden.device,
+                    )
+
+                    if sample_hidden.ndim != 2:
+                        raise RuntimeError(
+                            f"{file_id}: expected [T,H], "
+                            f"got {tuple(sample_hidden.shape)}"
+                        )
+
+                    if sample_hidden.shape[0] == 0:
+                        raise RuntimeError(
+                            f"{file_id}: "
+                            f"zero valid WavLM frames."
+                        )
+
+                    save_cache(
+                        path=cache_path,
+                        hidden=sample_hidden,
+                        valid_mask=sample_mask,
+                        target=file_target,
+                        file_id=file_id,
+                    )
+
+                    saved += 1
+                    total_frames += sample_hidden.shape[0]
+
+                    print(
+                        f"[{saved:4d}/{len(dataset):4d}] "
+                        f"{file_id:<36} "
+                        f"hidden={tuple(sample_hidden.shape)} "
+                        f"target={float(file_target):.1f}"
+                    )
+
+                # ------------------------------------------------------------
+                # GPU memory cleanup
+                # ------------------------------------------------------------
+
+                del wav
+                del attention_mask
+                del hidden
+                del valid_mask
+
+                if DEVICE.type == "cuda":
+                    torch.cuda.empty_cache()
+
+        dataset.close()
+
+        print()
+        print(f"New cache files: {saved}")
+        print(f"New cached frames: {total_frames}")
 
     # ------------------------------------------------------------------------
     # Final verification
@@ -661,17 +630,8 @@ def main() -> None:
 
     print()
     print("=" * 72)
-    print("CACHE COMPLETE")
+    print("FINAL CACHE VERIFICATION")
     print("=" * 72)
-
-    print(f"Dataset samples:     {len(dataset)}")
-    print(f"New cache files:     {saved}")
-    print(f"Skipped valid cache:  {skipped}")
-    print(f"Cache directory:     {CACHE_ROOT}")
-
-    # Verify every expected cache exists.
-    print()
-    print("Verifying cache files...")
 
     verified = 0
     frames = 0
@@ -679,7 +639,10 @@ def main() -> None:
     for _, row in work_df.iterrows():
 
         file_id = str(row["id"])
-        cache_path = cache_path_for_file(file_id)
+
+        cache_path = cache_path_for_file(
+            file_id
+        )
 
         if not cache_path.exists():
             raise RuntimeError(
@@ -691,18 +654,24 @@ def main() -> None:
             expected_hidden_size=hidden_size,
         )
 
-        # Target consistency check.
-        expected_target = float(row["Overall quality"])
+        # Target consistency
+        expected_target = float(
+            row["Overall quality"]
+        )
 
-        if abs(info["target"] - expected_target) > 1e-6:
+        if abs(
+            info["target"] - expected_target
+        ) > 1e-6:
+
             raise RuntimeError(
                 f"Target mismatch for {file_id}: "
                 f"cache={info['target']} "
                 f"CSV={expected_target}"
             )
 
-        # ID consistency check.
+        # File ID consistency
         if info["file_id"] != file_id:
+
             raise RuntimeError(
                 f"file_id mismatch for {file_id}: "
                 f"cache={info['file_id']}"
@@ -711,26 +680,29 @@ def main() -> None:
         verified += 1
         frames += info["frames"]
 
-    print(f"Verified files:      {verified}")
-    print(f"Total cached frames: {frames}")
+    print(f"Expected files:  {len(work_df)}")
+    print(f"Verified files:  {verified}")
+    print(f"Total frames:    {frames}")
+    print(f"Cache directory: {CACHE_ROOT}")
 
     if verified != len(work_df):
         raise RuntimeError(
             f"Verification mismatch: "
-            f"{verified} verified vs {len(work_df)} expected."
+            f"{verified} verified vs "
+            f"{len(work_df)} expected."
         )
 
     print()
+    print("=" * 72)
     print(">>> WavLM CACHE PASS")
+    print("=" * 72)
+
     print()
     print("Next step:")
-    print("  1. Run a cached-feature tiny test.")
+    print("  1. Run cached-feature tiny test.")
     print("  2. Compare cached QualityHead output against")
-    print("     the original WAV -> WavLM -> QualityHead pipeline.")
-    print("  3. Only after that, set CACHE_TINY_ONLY = False")
-    print("     and cache all 6,942 samples.")
-
-    dataset.close()
+    print("     original WAV -> WavLM -> QualityHead.")
+    print("  3. Then train on the full cached dataset.")
 
 
 if __name__ == "__main__":
