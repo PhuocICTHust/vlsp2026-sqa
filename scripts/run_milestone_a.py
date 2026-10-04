@@ -17,7 +17,7 @@ from sqa.frame_grid import MODEL_GRID
 from sqa.model import SQAModel
 from sqa.pipeline import run_on_folder
 from sqa.validator import validate_submission
-
+from sqa.postprocess import BASELINE_POSTPROCESS
 
 def main():
     parser = argparse.ArgumentParser()
@@ -44,6 +44,10 @@ def main():
     # ---- 2. Lưu JSON thô (chưa validate) để debug nếu cần ----
     raw_path = out_dir / "predictions_raw.json"
     raw_path.write_text(json.dumps(entries, indent=2, ensure_ascii=False))
+    cfg_path= out_dir / "postprocess_config.json"
+    cfg_path.write_text(json.dumps(BASELINE_POSTPROCESS.to_dict(), indent=2))
+    checklist["postprocess_is_baseline"] = "PASS" if BASELINE_POSTPROCESS.is_baseline else "FAIL"
+
     print(f"[3/5] Đã lưu {raw_path}")
 
     # ---- 3. Validator: chạy strict=False để thấy HẾT lỗi 1 lần, không chỉ lỗi đầu ----
