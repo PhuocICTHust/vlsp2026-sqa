@@ -18,8 +18,10 @@ Main checks
    The script reports whether they are consistent or not.
 6. Group-size and target-distribution statistics.
 7. Conservative audit of the three fault-description columns.
-8. Optional audio inventory, file metadata, duration and SHA-256 checks.
-9. Machine-readable PASS / WARN / HIGH-PRIORITY findings in the report.
+8. Strict initial Unnatural pause categorization for parser handoff.
+9. Raw annotation value-frequency exports for all fault-description columns.
+10. Optional audio inventory, file metadata, duration and SHA-256 checks.
+11. Machine-readable PASS / WARN / HIGH-PRIORITY findings in the report.
 
 Important terminology
 ---------------------
@@ -195,6 +197,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_REPORT,
         help=f"Markdown report path (default: {DEFAULT_REPORT})",
+    )
+    parser.add_argument(
+        "--frequency-dir",
+        type=Path,
+        default=ROOT / "reports" / "annotation_frequency",
+        help="Directory for full annotation value-frequency CSVs.",
     )
     parser.add_argument(
         "--wav-dir",
@@ -553,21 +561,27 @@ def audit_metadata_duplicates(df: pd.DataFrame) -> dict:
     details["_key"] = key.loc[duplicated_mask].to_numpy()
 
     rows: list[dict] = []
-    for k in duplicate_keys:
-        sub = details[details["_key"] == k]
+    for k in sorted(duplicate_keys, key=str):
+        sub = details[details["_key"] == k].sort_values(ID_COLUMN)
         rows.append(
             {
                 "duplicate_rows": len(sub),
                 "groups": sub["group"].nunique(),
                 "splits": sub["split"].nunique(),
                 "group_ids": ", ".join(sorted(sub["group"].astype(str).unique())[:10]),
-                "sample_ids": ", ".join(sub[ID_COLUMN].astype(str).head(5)),
+                "sample_ids": ", ".join(sorted(sub[ID_COLUMN].astype(str))[:5]),
             }
         )
 
-    duplicate_groups = pd.DataFrame(rows).sort_values(
-        ["duplicate_rows", "groups"], ascending=[False, False]
-    ) if rows else pd.DataFrame(columns=["duplicate_rows", "groups", "splits", "group_ids", "sample_ids"])
+    duplicate_groups = (
+        pd.DataFrame(rows).sort_values(
+            ["duplicate_rows", "groups", "splits", "group_ids", "sample_ids"],
+            ascending=[False, False, False, True, True],
+            kind="mergesort",
+        )
+        if rows
+        else pd.DataFrame(columns=["duplicate_rows", "groups", "splits", "group_ids", "sample_ids"])
+    )
 
     return {
         "metadata_columns": metadata_cols,
@@ -696,6 +710,132 @@ def classify_fault_annotation(fault_type: str, value: object) -> str:
         return "possible_absent_needs_review"
 
     return "other_description"
+
+
+
+# ---------------------------------------------------------------------------
+# Strict initial Unnatural Pause categorization for pipeline handoff.
+# ---------------------------------------------------------------------------
+
+STRICT_UNNATURAL_TOTALS = {
+    "no_fault": 5907,
+    "regex_parseable": 4550,
+    "single_ambiguous": 56,
+    "abnormal": 45,
+}
+
+STRICT_RANGE_RE = re.compile(
+    r"(?<!\d)"
+    r"(\d+(?:[\.,]\d+)?)"
+    r"\s*(?:s|sec|secs|second|seconds)?"
+    r"\s*(?:-|–|—|~|to)\s*"
+    r"(\d+(?:[\.,]\d+)?)"
+    r"\s*(?:s|sec|secs|second|seconds)?"
+    r"(?!\d)",
+    flags=re.IGNORECASE,
+)
+
+STRICT_SINGLE_FULL_RE = re.compile(
+    r"^\s*(\d+(?:[\.,]\d+)?)"
+    r"\s*(?:s|sec|secs|second|seconds)"
+    r"\s*[\.,]?\s*$",
+    flags=re.IGNORECASE,
+)
+
+
+def is_strict_no_fault_pause(value: object) -> bool:
+    """Match the team-specified strict no-fault bucket conservatively.
+
+    The supplied pipeline specification expects 5907 no-fault rows.  In the
+    current CSV this corresponds to smooth-like descriptions and
+    'not noticeable' variants. This is audit categorization only; it is not
+    the final fault-status resolver.
+    """
+    text = normalize_annotation(value)
+    return bool(text) and ("smooth" in text or "not noticeable" in text)
+
+
+def strict_unnatural_pause_category(value: object) -> str:
+    """Categorize Unnatural pause for the *initial strict* pipeline audit.
+
+    Policy is intentionally conservative:
+      1. smooth/not-noticeable -> no_fault
+      2. explicit range expression -> regex_parseable, except conjunction-linked
+         multi-ranges containing ' and ' are held as residual for parser-policy
+         discussion rather than silently accepting them in this strict baseline
+      3. one standalone timestamp -> single_ambiguous
+      4. everything else -> abnormal
+
+    This policy reproduces the counts stated in the team's current guide
+    (5907 / 4550 / 56 / 45) on the current train.csv. The guide also gives an
+    example of parsing multiple intervals joined by 'and'; therefore the strict
+    bucket is deliberately provisional and should be replaced/aligned when Đạt
+    publishes the deterministic parser contract.
+    """
+    text = normalize_annotation(value)
+    if not text:
+        return "abnormal"
+    if is_strict_no_fault_pause(text):
+        return "no_fault"
+    if STRICT_RANGE_RE.search(text) and " and " not in text:
+        return "regex_parseable"
+    if STRICT_SINGLE_FULL_RE.match(text):
+        return "single_ambiguous"
+    return "abnormal"
+
+
+def audit_strict_unnatural_pause(df: pd.DataFrame) -> dict:
+    categories = df[FAULT_COLUMNS["unnatural_pause"]].map(strict_unnatural_pause_category)
+    counts = categories.value_counts().reindex(
+        ["no_fault", "regex_parseable", "single_ambiguous", "abnormal"],
+        fill_value=0,
+    )
+    summary = pd.DataFrame(
+        {
+            "category": counts.index,
+            "count": counts.values,
+        }
+    )
+    summary["pct"] = summary["count"].map(lambda x: safe_pct(x, len(df)))
+    summary["guide_expected"] = summary["category"].map(STRICT_UNNATURAL_TOTALS)
+    summary["delta"] = summary["count"] - summary["guide_expected"]
+
+    tmp = df[[ID_COLUMN, FAULT_COLUMNS["unnatural_pause"], "split", "group", "source"]].copy()
+    tmp["strict_category"] = categories.values
+
+    return {
+        "summary": summary,
+        "categories": categories,
+        "examples": (
+            tmp.sort_values(["strict_category", ID_COLUMN])
+            .groupby("strict_category", group_keys=False)
+            .head(10)
+        ),
+        "matches_guide": bool((summary["delta"] == 0).all()),
+    }
+
+
+def write_annotation_frequency_tables(
+    df: pd.DataFrame,
+    output_dir: Path,
+) -> dict[str, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    outputs: dict[str, Path] = {}
+    for fault_type, column in FAULT_COLUMNS.items():
+        freq = (
+            df[column]
+            .fillna("")
+            .astype(str)
+            .map(lambda x: x.strip())
+            .value_counts(dropna=False)
+            .rename_axis("raw_value")
+            .reset_index(name="count")
+        )
+        freq["pct"] = freq["count"].map(lambda x: safe_pct(x, len(df)))
+        path = output_dir / f"{fault_type}_value_frequency.csv"
+        freq.to_csv(path, index=False)
+        outputs[fault_type] = path
+    return outputs
 
 
 def audit_fault_annotations(df: pd.DataFrame, examples_per_status: int = 5) -> dict:
@@ -892,6 +1032,7 @@ def build_findings(
     training_split: dict,
     quality: dict,
     fault_audit: dict,
+    strict_pause_audit: dict,
     audio_audit: dict | None,
 ) -> list[dict]:
     statuses: list[dict] = []
@@ -980,6 +1121,21 @@ def build_findings(
     else:
         add_status(statuses, "PASS", "fault_field_anomalies", "No strong cross-field phrase candidates detected by the audit rule.")
 
+    if strict_pause_audit["matches_guide"]:
+        add_status(
+            statuses,
+            "PASS",
+            "unnatural_pause_strict_categories",
+            "Strict initial categorization reproduces the team-specified 5907 / 4550 / 56 / 45 counts. This is a provisional audit policy, not the final parser contract.",
+        )
+    else:
+        add_status(
+            statuses,
+            "WARN",
+            "unnatural_pause_strict_categories",
+            "Strict initial categorization does not reproduce the team-specified reference counts; reconcile the parser policy before using these categories downstream.",
+        )
+
     # Audio.
     if audio_audit is None:
         add_status(statuses, "NOT-AUDITED", "audio_duplicates", "Audio archive/directory not supplied; waveform-level duplicates cannot be assessed.")
@@ -1006,6 +1162,7 @@ def build_report(
     training_split: dict,
     quality: dict,
     fault_audit: dict,
+    strict_pause_audit: dict,
     audio_audit: dict | None,
     findings: list[dict],
     top_n: int,
@@ -1213,8 +1370,60 @@ def build_report(
         lines.append(dataframe_to_markdown(fault_audit["examples"][fault_type]))
         lines.append("")
 
-    # 7 audio
-    lines.append("## 7. Audio inventory audit")
+    # 7 strict Unnatural pause pipeline handoff
+    lines.append("## 7. Unnatural pause — strict initial pipeline categorization")
+    lines.append("")
+    lines.append(
+        "> This section operationalizes the current team guidance for the initial strict audit. It is deliberately separate from Đạt's final deterministic parser and from Hiếu's human QA."
+    )
+    lines.append("")
+    lines.append(dataframe_to_markdown(strict_pause_audit["summary"]))
+    lines.append("")
+    lines.append(
+        "> The current strict policy treats conjunction-linked multi-range strings containing ` and ` as residual (`abnormal`) for audit purposes. The pipeline guide also gives multi-range-with-`and` as a parseable example, so this exact policy must be reconciled with Đạt before parser labels are frozen."
+    )
+    lines.append("")
+    lines.append("### Pipeline boundary")
+    lines.append("")
+    lines.extend([
+        "- **Kiên:** audits raw values/frequencies and maintains audit statistics.",
+        "- **Đạt:** owns deterministic text-to-interval parsing and normalization.",
+        "- **Hiếu:** owns human QA for ambiguous/residual cases and DSP candidates.",
+        "- **Kiên:** after QA, records the approved final label/version; this is downstream work and not part of raw audit.",
+    ])
+    lines.append("")
+    lines.append("### Audit interpretation")
+    lines.append("")
+    lines.extend([
+        "- `no_fault` means the raw text is in the strict no-fault bucket only; it is not a blanket semantic correction rule.",
+        "- `regex_parseable` means a deterministic range candidate is syntactically detectable; it still needs duration-aware validation before final localization.",
+        "- `single_ambiguous` is intentionally not converted to an interval.",
+        "- `abnormal` is residual data for parser review/QA; it is not automatically a positive or negative label.",
+    ])
+    lines.append("")
+
+    lines.append("### Full raw-value frequency tables")
+    lines.append("")
+    lines.append("CSV exports are generated under `reports/annotation_frequency/` for all three fault-description columns.")
+    lines.append("")
+    for fault_type, column in FAULT_COLUMNS.items():
+        lines.append(f"#### Top raw values: {fault_type}")
+        lines.append("")
+        freq = (
+            df[column]
+            .fillna("")
+            .astype(str)
+            .map(lambda x: x.strip())
+            .value_counts(dropna=False)
+            .rename_axis("raw_value")
+            .reset_index(name="count")
+        )
+        freq["pct"] = freq["count"].map(lambda x: safe_pct(x, len(df)))
+        lines.append(dataframe_to_markdown(freq.head(30)))
+        lines.append("")
+
+    # 8 audio
+    lines.append("## 8. Audio inventory audit")
     lines.append("")
     if audio_audit is None:
         lines.append("Not run: no `--wav-dir` or `--wav-zip` was supplied.")
@@ -1241,8 +1450,8 @@ def build_report(
         lines.append("> Audio SHA-256 duplicates indicate identical WAV file bytes. They are strong duplicate candidates but still do not by themselves prove the same semantic source utterance if files were independently produced with identical bytes.")
     lines.append("")
 
-    # 8 findings
-    lines.append("## 8. Findings and action items")
+    # 9 findings
+    lines.append("## 9. Findings and action items")
     lines.append("")
     for level in ["HIGH-PRIORITY", "WARN", "PASS", "NOT-AUDITED"]:
         selected = [x for x in findings if x["level"] == level]
@@ -1254,7 +1463,7 @@ def build_report(
             lines.append(f"- **{item['item']}** — {item['detail']}")
         lines.append("")
 
-    lines.append("## 9. Recommended next actions")
+    lines.append("## 10. Recommended next actions")
     lines.append("")
     lines.extend([
         "1. Resolve the repository split inconsistency: choose one canonical validation protocol and update/document all dependent scripts.",
@@ -1262,7 +1471,9 @@ def build_report(
         "3. Review the cross-group/cross-split metadata repetition candidates; distinguish repeated templates from genuine repeated source utterances.",
         "4. Keep the current group rule as a documented repository heuristic until the team confirms the semantic `source_group_id` definition.",
         "5. When the audio archive is available, rerun the audio inventory; use file/audio hashes for duplicate candidates.",
-        "6. Keep audit categories separate from final fault labels; do not silently convert `time_range_candidate` or review candidates into training labels.",
+        "6. Reconcile the strict Unnatural pause categories with Đạt's deterministic parser contract, especially multi-range expressions joined by `and`.",
+        "7. Define the handoff schema from parser -> Hiếu QA -> Kiên final-label management, including status, intervals, confidence and review metadata.",
+        "8. Keep audit categories separate from final fault labels; do not silently convert `time_range_candidate`, `single_ambiguous`, or `abnormal` into training labels.",
     ])
     lines.append("")
 
@@ -1334,12 +1545,20 @@ def main() -> int:
     group_audit = audit_group_structure(df, args.top_groups)
     quality = audit_quality(df)
     fault_audit = audit_fault_annotations(df)
+    strict_pause_audit = audit_strict_unnatural_pause(df)
+    frequency_paths = write_annotation_frequency_tables(df, args.frequency_dir.resolve())
     audio_audit = audit_audio_inventory(
         df,
         args.wav_dir.resolve() if args.wav_dir else None,
         args.wav_zip.resolve() if args.wav_zip else None,
         args.audio_hash,
     )
+
+    print("\nSTRICT Unnatural pause categories:")
+    print(strict_pause_audit["summary"].to_string(index=False))
+    print(f"\nRaw frequency tables written to: {args.frequency_dir.resolve()}")
+    for fault_type, path in frequency_paths.items():
+        print(f"  - {fault_type}: {path.resolve()}")
 
     findings = build_findings(
         schema=schema,
@@ -1351,6 +1570,7 @@ def main() -> int:
         training_split=training_split,
         quality=quality,
         fault_audit=fault_audit,
+        strict_pause_audit=strict_pause_audit,
         audio_audit=audio_audit,
     )
 
@@ -1366,6 +1586,7 @@ def main() -> int:
         training_split=training_split,
         quality=quality,
         fault_audit=fault_audit,
+        strict_pause_audit=strict_pause_audit,
         audio_audit=audio_audit,
         findings=findings,
         top_n=args.top_groups,

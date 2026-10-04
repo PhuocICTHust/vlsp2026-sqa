@@ -61,24 +61,24 @@ Rows identical across all original metadata columns except `id`: **239** across 
 | --- | --- | --- | --- | --- |
 | 11 | 5 | 2 | sys08tts, sys0giga, syse03e2, syseccd8, sysnists | sys08tts-0000022.wav, sys08tts-0000042.wav, sys08tts-0000054.wav, sys0giga-0001272.wav, sys0giga-0001532.wav |
 | 6 | 2 | 1 | sys09tts, sys0giga | sys09tts-0000038.wav, sys09tts-0000047.wav, sys0giga-0000128.wav, sys0giga-0000134.wav, sys0giga-0000153.wav |
-| 5 | 2 | 1 | sys61e08, sysnists | sysnists-0000230.wav, sysnists-0000233.wav, sysnists-0001854.wav, sysnists-0001857.wav, sys61e08-uttb9c3888.wav |
+| 5 | 2 | 1 | sys61e08, sysnists | sys61e08-uttb9c3888.wav, sysnists-0000230.wav, sysnists-0000233.wav, sysnists-0001854.wav, sysnists-0001857.wav |
 | 5 | 1 | 1 | sysnists | sysnists-0001324.wav, sysnists-0001341.wav, sysnists-0001412.wav, sysnists-0001534.wav, sysnists-0001545.wav |
 | 4 | 3 | 2 | sys06tts, sys08tts, sys0giga | sys06tts-0000034.wav, sys08tts-0000013.wav, sys08tts-0000023.wav, sys0giga-0001542.wav |
-| 4 | 2 | 2 | syse298c, sysf9ead | sysf9ead-utt60b8f3b.wav, sysf9ead-utta9c41ca.wav, sysf9ead-utt447a998.wav, syse298c-utt73f0d3d.wav |
-| 4 | 1 | 1 | sys3ad60 | sys3ad60-uttd5e1fe1.wav, sys3ad60-uttb1148e9.wav, sys3ad60-uttcb1bf69.wav, sys3ad60-utta5faea7.wav |
+| 4 | 2 | 2 | syse298c, sysf9ead | syse298c-utt73f0d3d.wav, sysf9ead-utt447a998.wav, sysf9ead-utt60b8f3b.wav, sysf9ead-utta9c41ca.wav |
 | 4 | 1 | 1 | sys0giga | sys0giga-0000488.wav, sys0giga-0000502.wav, sys0giga-0000508.wav, sys0giga-0000942.wav |
 | 4 | 1 | 1 | sys0giga | sys0giga-0001706.wav, sys0giga-0001718.wav, sys0giga-0001937.wav, sys0giga-0001940.wav |
+| 4 | 1 | 1 | sys3ad60 | sys3ad60-utta5faea7.wav, sys3ad60-uttb1148e9.wav, sys3ad60-uttcb1bf69.wav, sys3ad60-uttd5e1fe1.wav |
 | 3 | 3 | 2 | sys07tts, sys0giga, sysnistl | sys07tts-0000044.wav, sys0giga-0000518.wav, sysnistl-0000293.wav |
-| 3 | 2 | 1 | sys0giga, sysnists | sys0giga-0000016.wav, sys0giga-0000022.wav, sysnists-0000921.wav |
-| 3 | 2 | 2 | sysbdba5, sysnists | sysnists-0000194.wav, sysnists-0002207.wav, sysbdba5-utt401b0fb.wav |
-| 3 | 2 | 1 | sys8f532, sysnists | sysnists-0000349.wav, sysnists-0002314.wav, sys8f532-utt7d78eb8.wav |
-| 3 | 2 | 1 | sys0giga, sysnists | sys0giga-0001273.wav, sys0giga-0001305.wav, sysnists-0000394.wav |
-| 3 | 2 | 1 | sys0giga, sysnists | sys0giga-0000482.wav, sys0giga-0000935.wav, sysnists-0002398.wav |
-| 3 | 2 | 2 | sys8f532, sysdc2ac | sysdc2ac-utt6866c3d.wav, sys8f532-uttab42b4f.wav, sys8f532-uttab00606.wav |
+| 3 | 2 | 2 | sys8f532, sysdc2ac | sys8f532-uttab00606.wav, sys8f532-uttab42b4f.wav, sysdc2ac-utt6866c3d.wav |
+| 3 | 2 | 2 | sysbdba5, sysnists | sysbdba5-utt401b0fb.wav, sysnists-0000194.wav, sysnists-0002207.wav |
 | 3 | 2 | 1 | sys07tts, sys0giga | sys07tts-0000045.wav, sys0giga-0001582.wav, sys0giga-0001705.wav |
+| 3 | 2 | 1 | sys0giga, sysnists | sys0giga-0000016.wav, sys0giga-0000022.wav, sysnists-0000921.wav |
+| 3 | 2 | 1 | sys0giga, sysnists | sys0giga-0000482.wav, sys0giga-0000935.wav, sysnists-0002398.wav |
+| 3 | 2 | 1 | sys0giga, sysnists | sys0giga-0001273.wav, sys0giga-0001305.wav, sysnists-0000394.wav |
+| 3 | 2 | 1 | sys8f532, sysnists | sys8f532-utt7d78eb8.wav, sysnists-0000349.wav, sysnists-0002314.wav |
 | 3 | 1 | 1 | sys0giga | sys0giga-0001253.wav, sys0giga-0001974.wav, sys0giga-0001993.wav |
-| 3 | 1 | 1 | sys798be | sys798be-utt04f5e34.wav, sys798be-utt9726d0e.wav, sys798be-utte987f3c.wav |
-| 3 | 1 | 1 | sys3ad60 | sys3ad60-uttb703120.wav, sys3ad60-uttdde4b80.wav, sys3ad60-utt2b94201.wav |
+| 3 | 1 | 1 | sys0giga | sys0giga-0001596.wav, sys0giga-0001673.wav, sys0giga-0001683.wav |
+| 3 | 1 | 1 | sys3ad60 | sys3ad60-utt2b94201.wav, sys3ad60-uttb703120.wav, sys3ad60-uttdde4b80.wav |
 
 ## 3. Source / group audit
 
@@ -447,13 +447,149 @@ Lowest group means:
 | sys00691-utt2f362b7.wav | 1.2-1.6s | val | sys00691 | bvcc | time_range_candidate |
 | sys00691-utt33f1918.wav | 1-1.2s | val | sys00691 | bvcc | time_range_candidate |
 
-## 7. Audio inventory audit
+## 7. Unnatural pause — strict initial pipeline categorization
+
+> This section operationalizes the current team guidance for the initial strict audit. It is deliberately separate from Đạt's final deterministic parser and from Hiếu's human QA.
+
+| category | count | pct | guide_expected | delta |
+| --- | --- | --- | --- | --- |
+| no_fault | 5907 | 55.9481 | 5907 | 0 |
+| regex_parseable | 4550 | 43.0953 | 4550 | 0 |
+| single_ambiguous | 56 | 0.5304 | 56 | 0 |
+| abnormal | 45 | 0.4262 | 45 | 0 |
+
+> The current strict policy treats conjunction-linked multi-range strings containing ` and ` as residual (`abnormal`) for audit purposes. The pipeline guide also gives multi-range-with-`and` as a parseable example, so this exact policy must be reconciled with Đạt before parser labels are frozen.
+
+### Pipeline boundary
+
+- **Kiên:** audits raw values/frequencies and maintains audit statistics.
+- **Đạt:** owns deterministic text-to-interval parsing and normalization.
+- **Hiếu:** owns human QA for ambiguous/residual cases and DSP candidates.
+- **Kiên:** after QA, records the approved final label/version; this is downstream work and not part of raw audit.
+
+### Audit interpretation
+
+- `no_fault` means the raw text is in the strict no-fault bucket only; it is not a blanket semantic correction rule.
+- `regex_parseable` means a deterministic range candidate is syntactically detectable; it still needs duration-aware validation before final localization.
+- `single_ambiguous` is intentionally not converted to an interval.
+- `abnormal` is residual data for parser review/QA; it is not automatically a positive or negative label.
+
+### Full raw-value frequency tables
+
+CSV exports are generated under `reports/annotation_frequency/` for all three fault-description columns.
+
+#### Top raw values: noise
+
+| raw_value | count | pct |
+| --- | --- | --- |
+| not noticeable | 5798 | 54.9157 |
+| Not noticeable | 987 | 9.3484 |
+| Not noticeable. | 272 | 2.5762 |
+| there is outdoor noise at 0-6.5s | 21 | 0.1989 |
+| there is outdoor noise at 0-8.5s | 20 | 0.1894 |
+| there is outdoor noise at 0-5.5s | 16 | 0.1515 |
+| there is outdoor noise at 0-9.5s | 15 | 0.1421 |
+| there is outdoor noise at 0-10s | 13 | 0.1231 |
+| There is buzzing sound in the audio from 0 to 6.9 seconds | 12 | 0.1137 |
+| There is sound similar to wind in the audio from 0-10s | 11 | 0.1042 |
+| there is outdoor noise at 0-11.5s | 11 | 0.1042 |
+| There is background rustle noise in the audio from 0 to 9 seconds. | 10 | 0.0947 |
+| There is background rustle noise in the audio from 0 to 11 seconds. | 10 | 0.0947 |
+| There is a crackling noise 0-6s | 10 | 0.0947 |
+| There is outdoor background noise in the audio from 0 to 10.9 seconds. | 10 | 0.0947 |
+| There is outdoor background noise in the audio from 0s to 2.3s | 10 | 0.0947 |
+| There is a crackling noise 0-7s | 10 | 0.0947 |
+| There is background rustle noise in the audio from 0 to 6 seconds. | 9 | 0.0852 |
+| There is a crackling noise 0-10s | 9 | 0.0852 |
+| There is a crackling noise 0-9s | 9 | 0.0852 |
+| There is sound similar to wind in the audio from 0-8s | 9 | 0.0852 |
+| There is outdoor background noise in the audio from 0 to 5.9 seconds. | 9 | 0.0852 |
+| There is a crackling noise 0-2s | 8 | 0.0758 |
+| There is a crackling noise 0-11s | 8 | 0.0758 |
+| There is buzzing sound in the audio from 0 to 11.9 seconds | 8 | 0.0758 |
+| There is buzzing sound in the audio from 0 to 7.9 seconds | 8 | 0.0758 |
+| There is buzzing sound in the audio from 0-10s | 8 | 0.0758 |
+| There is a crackling noise 0-12s | 8 | 0.0758 |
+| There is a crackling noise 0-2.6s | 7 | 0.0663 |
+| There is background rustle noise in the audio from 0 to 2 seconds. | 7 | 0.0663 |
+
+#### Top raw values: distortion
+
+| raw_value | count | pct |
+| --- | --- | --- |
+| not distorted | 3355 | 31.7769 |
+| Not distorted | 212 | 2.0080 |
+| Not distorted. | 174 | 1.6480 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 0-9s | 23 | 0.2178 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 0-12s | 23 | 0.2178 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 0-10s | 22 | 0.2084 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 0-7s | 21 | 0.1989 |
+| there is a pitch distortion with mechanical sound in the audio from 0-2s | 18 | 0.1705 |
+| there is a pitch distortion with mechanical sound in the audio from 0-1s | 18 | 0.1705 |
+| There is a voice feels distorted with crackling and buzzing texture in the audio from 0 to 4 seconds | 17 | 0.1610 |
+| there is mechanical sound distortion at 0-9.5s | 17 | 0.1610 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 0-6s | 16 | 0.1515 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 0.5-2.5s | 16 | 0.1515 |
+| There is pitch distortion with mechanical sound from 0.5-2.5s | 16 | 0.1515 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality from 0~3s | 15 | 0.1421 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 0-8s | 15 | 0.1421 |
+| there is mechanical sound distortion at 0-8.5s | 15 | 0.1421 |
+| there is a pitch distortion with mechanical sound in the audio from 0-3s | 14 | 0.1326 |
+| there is mechanical sound distortion at 0-11.5s | 14 | 0.1326 |
+| there is pitch distortion with mechanical sound in the audio from 0 to 2.5 seconds | 13 | 0.1231 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 0.5-2s | 13 | 0.1231 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 0-3s | 12 | 0.1137 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 0.5 to 2 seconds | 12 | 0.1137 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 0-11s | 12 | 0.1137 |
+| there is a pitch distortion with mechanical sound in the audio from 0-2.5s | 11 | 0.1042 |
+| there is mechanical sound distortion at 0-6.5s | 11 | 0.1042 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality from 0~1.5s | 11 | 0.1042 |
+| There is pitch distortion with mechanical sound and intermittent electric current quality from 0~2.5s | 11 | 0.1042 |
+| There is pitch distortion caused by the accelerated speech from 0~2s | 11 | 0.1042 |
+| There is a distortion with abrupt stop in the audio after 6.9 seconds. | 11 | 0.1042 |
+
+#### Top raw values: unnatural_pause
+
+| raw_value | count | pct |
+| --- | --- | --- |
+| very smooth | 3817 | 36.1527 |
+| Very smooth | 1806 | 17.1055 |
+| Very smooth. | 272 | 2.5762 |
+| 0-6s | 62 | 0.5872 |
+| 0-2s | 59 | 0.5588 |
+| 1-2s | 55 | 0.5209 |
+| 1-1.5s | 50 | 0.4736 |
+| 1.5-2s | 45 | 0.4262 |
+| 0-2.5s | 45 | 0.4262 |
+| 0-10s | 43 | 0.4073 |
+| 0-4s | 43 | 0.4073 |
+| 0-3s | 42 | 0.3978 |
+| 0-7s | 38 | 0.3599 |
+| 0-5.5s | 37 | 0.3504 |
+| 0.5-1.5s | 37 | 0.3504 |
+| 0-8s | 36 | 0.3410 |
+| 0-3.5s | 35 | 0.3315 |
+| 0-6.5s | 35 | 0.3315 |
+| 1.5-2.5s | 33 | 0.3126 |
+| 2-2.5s | 32 | 0.3031 |
+| 0-9.5s | 32 | 0.3031 |
+| 0-7.5s | 31 | 0.2936 |
+| 0-8.5s | 31 | 0.2936 |
+| 0-9s | 30 | 0.2841 |
+| 2-3s | 30 | 0.2841 |
+| 0-1s | 29 | 0.2747 |
+| 0-11.5s | 27 | 0.2557 |
+| 1-3s | 27 | 0.2557 |
+| 0-5s | 26 | 0.2463 |
+| 0.5-2s | 26 | 0.2463 |
+
+## 8. Audio inventory audit
 
 Not run: no `--wav-dir` or `--wav-zip` was supplied.
 
 > Audio-level duplicate detection remains unresolved until the corresponding audio archive/directory is available.
 
-## 8. Findings and action items
+## 9. Findings and action items
 
 ### HIGH-PRIORITY
 
@@ -473,16 +609,19 @@ Not run: no `--wav-dir` or `--wav-zip` was supplied.
 - **source_composition** — Observed source counts match the repository's hard-coded expected composition.
 - **group_disjoint_split** — No inferred group overlaps between train and validation in the group-disjoint implementation.
 - **quality_target** — All quality targets are numeric and inside [1, 5].
+- **unnatural_pause_strict_categories** — Strict initial categorization reproduces the team-specified 5907 / 4550 / 56 / 45 counts. This is a provisional audit policy, not the final parser contract.
 
 ### NOT-AUDITED
 
 - **audio_duplicates** — Audio archive/directory not supplied; waveform-level duplicates cannot be assessed.
 
-## 9. Recommended next actions
+## 10. Recommended next actions
 
 1. Resolve the repository split inconsistency: choose one canonical validation protocol and update/document all dependent scripts.
 2. Manually inspect the largest inferred groups (`sysnists`, `sys0giga`, `sysnistl`, and the largest BVCC groups) and confirm what the prefix represents.
 3. Review the cross-group/cross-split metadata repetition candidates; distinguish repeated templates from genuine repeated source utterances.
 4. Keep the current group rule as a documented repository heuristic until the team confirms the semantic `source_group_id` definition.
 5. When the audio archive is available, rerun the audio inventory; use file/audio hashes for duplicate candidates.
-6. Keep audit categories separate from final fault labels; do not silently convert `time_range_candidate` or review candidates into training labels.
+6. Reconcile the strict Unnatural pause categories with Đạt's deterministic parser contract, especially multi-range expressions joined by `and`.
+7. Define the handoff schema from parser -> Hiếu QA -> Kiên final-label management, including status, intervals, confidence and review metadata.
+8. Keep audit categories separate from final fault labels; do not silently convert `time_range_candidate`, `single_ambiguous`, or `abnormal` into training labels.
