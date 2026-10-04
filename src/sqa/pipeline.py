@@ -9,7 +9,15 @@ import torch
 from .evaluator import FAULT_TYPES
 from .frame_grid import MODEL_GRID, ModelFrameGrid
 from .model import SQAModel
-from .postprocess import BASELINE_POSTPROCESS, PostProcessConfig, predict_fault_type, serialize_intervals
+from collections.abc import Mapping
+
+from .postprocess import (
+    BASELINE_POSTPROCESS,
+    PostProcessConfig,
+    predict_fault_type,
+    resolve_config,
+    serialize_intervals,
+)
 
 TARGET_SAMPLE_RATE = 16_000
 
@@ -35,7 +43,7 @@ def build_submission_entry(
     duration: float,
     model: SQAModel,
     grid: ModelFrameGrid = MODEL_GRID,
-    postprocess_config: PostProcessConfig = BASELINE_POSTPROCESS,
+    postprocess_config: PostProcessConfig | Mapping[str, PostProcessConfig] = BASELINE_POSTPROCESS,
     device: str = "cpu",
 ) -> dict:
     model.eval()
@@ -50,9 +58,9 @@ def build_submission_entry(
     faults = {}
     for i, ft in enumerate(FAULT_TYPES):
         intervals, _p_presence, _branch, _raw = predict_fault_type(
-            fault_probs_np[:, i], grid, duration, config=postprocess_config
+            fault_probs_np[:, i], grid, duration, config=resolve_config(postprocess_config, ft)
         )
-        faults[ft] = serialize_intervals(intervals, round_digits=2)
+        faults[ft] = serialize_intervals(intervals, round_digits=2, duration=duration)
 
     return {"file_id": file_id, "quality_score": round(quality_score, 3), "faults": faults}
 
@@ -61,7 +69,7 @@ def run_on_folder(
     audio_dir: str | Path,
     model: SQAModel,
     grid: ModelFrameGrid = MODEL_GRID,
-    postprocess_config: PostProcessConfig = BASELINE_POSTPROCESS,
+    postprocess_config: PostProcessConfig | Mapping[str, PostProcessConfig] = BASELINE_POSTPROCESS,
     device: str = "cpu",
 ) -> tuple[list[dict], dict]:
     audio_dir = Path(audio_dir)

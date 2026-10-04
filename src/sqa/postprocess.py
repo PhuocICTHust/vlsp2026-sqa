@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass
 
 import numpy as np
 
@@ -9,14 +10,60 @@ from .frame_grid import ModelFrameGrid
 
 @dataclass(frozen=True)
 class PostProcessConfig:
-
+    """Mọi tham số hậu xử lý. Mặc định = baseline thuần."""
+    tau_frame: float = 0.5
+    min_duration: float = 0.0
+    merge_gap: float = 0.0
     use_presence_gate: bool = False
+    tau_presence: float = 0.5
+    presence_k_ratio: float = 0.05
+    presence_min_k: int = 3
     use_relax_threshold: bool = False
     use_relax_min_duration: bool = False
+    tau_low: float = 0.2
     use_peak_window: bool = False
+    tau_peak_min: float = 0.3
+    peak_half_window_sec: float = 0.15
+
+    def __post_init__(self):
+        for name in ("tau_frame", "tau_presence", "tau_low", "tau_peak_min"):
+            v = getattr(self, name)
+            if not 0.0 <= v <= 1.0:
+                raise ValueError(f"{name} phải trong [0, 1], nhận {v}")
+        for name in ("min_duration", "merge_gap", "peak_half_window_sec", "presence_k_ratio"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"{name} không được âm, nhận {getattr(self, name)}")
+        if self.presence_min_k < 1:
+            raise ValueError(f"presence_min_k phải >= 1, nhận {self.presence_min_k}")
+
+    @property
+    def is_baseline(self) -> bool:
+        return (
+            self.min_duration == 0.0
+            and self.merge_gap == 0.0
+            and not (
+                self.use_presence_gate
+                or self.use_relax_threshold
+                or self.use_relax_min_duration
+                or self.use_peak_window
+            )
+        )
+
+    def to_dict(self) -> dict:
+        return {**asdict(self), "is_baseline": self.is_baseline}
 
 
 BASELINE_POSTPROCESS = PostProcessConfig()
+
+
+def resolve_config(
+    config: PostProcessConfig | Mapping[str, PostProcessConfig], fault_type: str
+) -> PostProcessConfig:
+    if isinstance(config, PostProcessConfig):
+        return config
+    if fault_type not in config:
+        raise KeyError(f"thiếu PostProcessConfig cho fault type '{fault_type}'")
+    return config[fault_type]
 
 
 def normalize_intervals(
@@ -45,8 +92,21 @@ def normalize_intervals(
     return [[round(s, round_digits), round(e, round_digits)] for s, e in merged]
 
 
-def serialize_intervals(intervals: list[list[float]], round_digits: int = 2) -> list[list[float]]:
-    return [[round(s, round_digits), round(e, round_digits)] for s, e in intervals]
+def serialize_intervals(
+    intervals: list[list[float]], round_digits: int = 2, duration: float | None = None
+) -> list[list[float]]:
+    """end == duration giữ nguyên, không làm tròn (tránh mất frame cuối)."""
+    out = []
+    for s, e in intervals:
+        s_out = round(s, round_digits)
+        if duration is not None and e >= duration - 1e-9:
+            e_out = float(duration)
+        else:
+            e_out = round(e, round_digits)
+            if duration is not None:
+                e_out = min(e_out, float(duration))
+        out.append([max(0.0, s_out), e_out])
+    return out
 
 
 def presence_from_frames(
@@ -65,8 +125,8 @@ def frame_probs_to_intervals(
     grid: ModelFrameGrid,
     duration: float | None = None,
     threshold: float = 0.5,
-    min_duration: float = 0.10,
-    merge_gap: float = 0.08,
+    min_duration: float = 0.0,
+    merge_gap: float = 0.0,
 ) -> list[list[float]]:
     if duration is None:
         duration = len(probs) * grid.frame_hop_sec + grid.offset_sec
@@ -83,8 +143,15 @@ def frame_probs_to_intervals(
     if start is not None:
         runs.append((start, len(binary)))
 
+    # WavLM thiếu frame cho 5-25 ms cuối file -> run chạm frame cuối kéo tới duration
+    n = len(binary)
+    tail_end = n * grid.frame_hop_sec + grid.offset_sec
+    extend_tail = 0.0 <= duration - tail_end < 2 * grid.frame_hop_sec
     raw = [
-        [s * grid.frame_hop_sec + grid.offset_sec, e * grid.frame_hop_sec + grid.offset_sec]
+        [
+            s * grid.frame_hop_sec + grid.offset_sec,
+            duration if (e == n and extend_tail) else e * grid.frame_hop_sec + grid.offset_sec,
+        ]
         for s, e in runs
     ]
     return normalize_intervals(raw, duration=duration, merge_gap=merge_gap, min_duration=min_duration)
@@ -94,49 +161,42 @@ def predict_fault_type(
     frame_probs: np.ndarray,
     grid: ModelFrameGrid,
     duration: float,
-    tau_presence: float = 0.5,
-    tau_frame: float = 0.5,
-    tau_low: float = 0.2,
-    min_duration: float = 0.10,
-    merge_gap: float = 0.08,
-    tau_peak_min: float = 0.3,
-    valid_len: int | None = None,
     config: PostProcessConfig = BASELINE_POSTPROCESS,
+    valid_len: int | None = None,
 ) -> tuple[list[list[float]], float, str, bool]:
     probs = frame_probs if valid_len is None else frame_probs[:valid_len]
     if len(probs) == 0:
         return [], 0.0, "empty_audio", False
 
-    raw_frame_presence = bool((probs > tau_frame).any())
-    p_presence = presence_from_frames(probs)
+    raw_frame_presence = bool((probs > config.tau_frame).any())
+    p_presence = presence_from_frames(probs, k_ratio=config.presence_k_ratio, min_k=config.presence_min_k)
 
-    if config.use_presence_gate and p_presence < tau_presence:
+    if config.use_presence_gate and p_presence < config.tau_presence:
         return [], p_presence, "presence_low", raw_frame_presence
 
     def _clip(intervals: list[list[float]]) -> list[list[float]]:
         return [[max(0.0, s), min(duration, e)] for s, e in intervals if max(0.0, s) < min(duration, e)]
 
     peak_prob = float(probs.max())
-    relaxed_configs = [{"name": "direct", "threshold": tau_frame, "min_duration": min_duration}]
+    relaxed_tau = max(0.5 * peak_prob, config.tau_low)
+    attempts = [("direct", config.tau_frame, config.min_duration)]
     if config.use_relax_threshold:
-        relaxed_configs.append(
-            {"name": "relax_threshold", "threshold": max(0.5 * peak_prob, tau_low), "min_duration": min_duration}
-        )
+        attempts.append(("relax_threshold", relaxed_tau, config.min_duration))
     if config.use_relax_min_duration:
-        relaxed_configs.append(
-            {"name": "relax_min_dur", "threshold": max(0.5 * peak_prob, tau_low), "min_duration": 0.0}
-        )
+        attempts.append(("relax_min_dur", relaxed_tau, 0.0))
 
-    for cfg in relaxed_configs:
+    for name, threshold, min_duration in attempts:
         intervals = _clip(
-            frame_probs_to_intervals(probs, grid, duration, cfg["threshold"], cfg["min_duration"], merge_gap)
+            frame_probs_to_intervals(
+                probs, grid, duration, threshold=threshold, min_duration=min_duration, merge_gap=config.merge_gap
+            )
         )
         if intervals:
-            return intervals, p_presence, cfg["name"], raw_frame_presence
+            return intervals, p_presence, name, raw_frame_presence
 
-    if config.use_peak_window and peak_prob >= tau_peak_min:
+    if config.use_peak_window and peak_prob >= config.tau_peak_min:
         peak_idx = int(probs.argmax())
-        half_win_frames = int(round(0.15 / grid.frame_hop_sec))
+        half_win_frames = int(round(config.peak_half_window_sec / grid.frame_hop_sec))
         s = max(0, peak_idx - half_win_frames)
         e = min(len(probs), peak_idx + half_win_frames)
         interval = _clip([[s * grid.frame_hop_sec + grid.offset_sec, e * grid.frame_hop_sec + grid.offset_sec]])
