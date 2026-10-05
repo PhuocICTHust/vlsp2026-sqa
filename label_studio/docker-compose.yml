@@ -1,0 +1,14 @@
+services:
+  label-studio:
+    image: heartexlabs/label-studio:latest
+    container_name: vlsp_label_studio
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true
+      - LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=/label-studio/files
+      - LABEL_STUDIO_DISABLE_SIGNUP_WITHOUT_LINK=false
+    volumes:
+      - ./ls_data:/label-studio/data
+      - ../:/label-studio/files:ro
