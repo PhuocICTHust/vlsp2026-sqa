@@ -7,7 +7,7 @@ import numpy as np
 from scipy.stats import pearsonr
 from sklearn.metrics import f1_score
 
-from .frame_grid import EvaluatorGrid
+from .frame_grid import EvaluatorGrid, time_to_frame_end, time_to_frame_start
 
 FAULT_TYPES = ("noise", "distortion", "unnatural_pause")
 
@@ -29,9 +29,10 @@ def intervals_to_frame_mask(intervals, duration: float, grid: EvaluatorGrid) -> 
     n_frames = int(np.ceil(duration / grid.frame_hop_sec))
     mask = np.zeros(n_frames, dtype=bool)
     for start, end in intervals:
-        s = max(0, int(np.floor((start - grid.offset_sec) / grid.frame_hop_sec)))
-        e = min(n_frames, int(np.ceil((end - grid.offset_sec) / grid.frame_hop_sec)))
-        mask[s:e] = True
+        s = max(0, time_to_frame_start(start, grid.frame_hop_sec, grid.offset_sec))
+        e = min(n_frames, time_to_frame_end(end, grid.frame_hop_sec, grid.offset_sec))
+        if e > s:
+            mask[s:e] = True
     return mask
 
 

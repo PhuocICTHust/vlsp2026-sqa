@@ -1,144 +1,80 @@
+"""Kiểm tra alignment WavLM: hop lấy từ config, chỉ đo offset và drift.
+
+Chạy: python scripts/run_alignment_test.py
+"""
 from __future__ import annotations
 
 import numpy as np
 import torch
 
+from sqa.frame_grid import MODEL_GRID, SAMPLE_RATE, conv_output_frames, conv_stack_geometry
 from sqa.model import WavLMBackbone
 
-SR = 16_000
+BURST_SEC = 0.01
 
 
-def make_transient(duration_sec: float, transient_at: float, sr: int = SR) -> np.ndarray:
-    """Audio gần như im lặng, có 1 xung ngắn (transient) rõ ràng tại
-    transient_at giây — dùng để dò xem frame nào của backbone phản ứng mạnh
-    nhất, và vùng activation trải rộng bao nhiêu frame quanh đó."""
-    x = np.zeros(int(duration_sec * sr), dtype=np.float32)
-    burst_len = int(0.01 * sr)  # xung 10ms
-    start = int(transient_at * sr)
-    end = min(len(x), start + burst_len)
+def make_transient(duration_sec: float, transient_at: float, sr: int = SAMPLE_RATE) -> np.ndarray:
+    x = np.zeros(int(round(duration_sec * sr)), dtype=np.float32)
+    start = int(round(transient_at * sr))
+    end = min(len(x), start + int(BURST_SEC * sr))
     rng = np.random.default_rng(0)
     x[start:end] = 0.8 * rng.standard_normal(end - start).astype(np.float32)
     return x
 
 
-def run_case(backbone: WavLMBackbone, duration_sec: float, transient_at: float) -> dict:
+def run_case(backbone: WavLMBackbone, duration_sec: float, transient_at: float, hop: float) -> dict:
     x = make_transient(duration_sec, transient_at)
-    wav = torch.from_numpy(x).unsqueeze(0)  # [1, num_samples]
-
-    # Baseline: cùng audio nhưng KHÔNG có transient.
-    # So sánh hidden states để tìm frame nào thực sự thay đổi
-    # do transient gây ra.
-    x_base = np.zeros_like(x)
-    wav_base = torch.from_numpy(x_base).unsqueeze(0)
-
     with torch.no_grad():
-        h = backbone(wav)       # [1, T, H]
-        h_base = backbone(wav_base)
-
-    h = h.squeeze(0)
-    h_base = h_base.squeeze(0)
-
-    # Difference caused by transient.
-    # Dùng L2 distance giữa hidden state có/không có transient.
+        h = backbone(torch.from_numpy(x).unsqueeze(0)).squeeze(0)
+        h_base = backbone(torch.zeros(1, len(x))).squeeze(0)
     activation = (h - h_base).norm(dim=-1).numpy()
-
-    t_frames = len(activation)
-
-    # Chỉ dùng duration/T để ước lượng frame spacing.
-    hop_est = duration_sec / t_frames
-
-    # Frame phản ứng mạnh nhất với transient.
     peak_idx = int(activation.argmax())
-    predicted_center = (peak_idx + 0.5) * hop_est
-
-    # Sai số giữa tâm frame dự đoán và vị trí transient.
-    error_ms = abs(predicted_center - transient_at) * 1000.0
-
-    # Activation span:
-    # tìm vùng có response đáng kể so với peak.
-    peak = float(activation.max())
-
-    if peak > 0:
-        threshold = peak * 0.1
-        active_indices = np.flatnonzero(activation >= threshold)
-
-        if len(active_indices) > 0:
-            first_idx = int(active_indices[0])
-            last_idx = int(active_indices[-1])
-
-            activation_span_frames = last_idx - first_idx + 1
-        else:
-            activation_span_frames = 0
-    else:
-        activation_span_frames = 0
-
+    center = transient_at + BURST_SEC / 2
+    above = np.flatnonzero(activation >= 0.5 * activation.max())
     return {
         "duration_sec": duration_sec,
         "transient_at": transient_at,
-        "T": t_frames,
-        "hop_estimate_via_duration_over_T": round(hop_est, 6),
+        "T": len(activation),
+        "T_expected": conv_output_frames(len(x)),
         "peak_frame_idx": peak_idx,
-        "predicted_center_s_using_hop_estimate": round(predicted_center, 4),
-        "error_ms": round(error_ms, 2),
-        "activation_span_frames": activation_span_frames,
+        "residual_ms": round((center - peak_idx * hop) * 1000.0, 2),
+        "span50_frames": int(above[-1] - above[0] + 1) if len(above) else 0,
     }
 
 
 def main():
     backbone = WavLMBackbone(freeze=True)
     backbone.eval()
+    cfg = backbone.backbone.config
+    hop_samples, rf_samples = conv_stack_geometry(tuple(cfg.conv_kernel), tuple(cfg.conv_stride))
+    hop = hop_samples / SAMPLE_RATE
+    print(f"conv_kernel={cfg.conv_kernel} conv_stride={cfg.conv_stride}")
+    print(f"=> hop = {hop_samples} sample = {hop * 1000:.3f} ms, receptive field (conv) = {rf_samples} sample")
+    if abs(hop - MODEL_GRID.frame_hop_sec) > 1e-12:
+        raise SystemExit(f"MODEL_GRID.frame_hop_sec={MODEL_GRID.frame_hop_sec} lệch hop lý thuyết {hop}")
 
     cases = []
     for duration in (1.0, 2.0, 3.0):
-        for pos_ratio in (0.1, 0.5, 0.9):
-            transient_at = round(duration * pos_ratio, 3)
-            cases.append(run_case(backbone, duration, transient_at))
+        for t in (0.10, 0.50, 0.90, 1.50, 2.00):
+            if t + BURST_SEC < duration:
+                cases.append(run_case(backbone, duration, t, hop))
+    for duration, t in ((10.0, 9.5), (20.0, 10.0), (20.0, 19.5)):
+        cases.append(run_case(backbone, duration, t, hop))
 
-    header = [
-        "duration_sec",
-        "transient_at",
-        "T",
-        "hop_estimate_via_duration_over_T",
-        "peak_frame_idx",
-        "predicted_center_s_using_hop_estimate",
-        "error_ms",
-        "activation_span_frames",
-    ]
+    header = list(cases[0].keys())
     print("\t".join(header))
     for c in cases:
         print("\t".join(str(c[k]) for k in header))
 
-    hops = [c["hop_estimate_via_duration_over_T"] for c in cases]
-    print(f"\nhop_estimate: min={min(hops):.6f} max={max(hops):.6f} "
-          f"(nếu 2 giá trị này lệch nhau đáng kể -> backbone KHÔNG có hop cố định, "
-          f"cần điều tra thêm trước khi gán MODEL_GRID)")
-    print(f"error_ms trung bình: {sum(c['error_ms'] for c in cases) / len(cases):.2f} ms")
-    mean_error = sum(c["error_ms"] for c in cases) / len(cases)
+    bad_t = [c for c in cases if c["T"] != c["T_expected"]]
+    res = np.array([c["residual_ms"] for c in cases])
+    pos = np.array([c["transient_at"] for c in cases])
+    slope_ms_per_10s = np.polyfit(pos, res, 1)[0] * 10.0
 
-    print(f"\nerror_ms trung bình: {mean_error:.2f} ms")
-    # Fit time(frame) = offset + frame_idx * hop
-    frame_idx = np.array([c["peak_frame_idx"] for c in cases], dtype=np.float64)
-    target_time = np.array([c["transient_at"] for c in cases], dtype=np.float64)
-
-    A = np.column_stack([np.ones_like(frame_idx), frame_idx])
-    offset_fit, hop_fit = np.linalg.lstsq(A, target_time, rcond=None)[0]
-
-    pred_time = offset_fit + hop_fit * frame_idx
-    fit_error_ms = np.abs(pred_time - target_time) * 1000.0
-
-    print("\nLinear fit:")
-    print(f"  frame_hop_sec = {hop_fit:.9f}")
-    print(f"  offset_sec    = {offset_fit:.9f}")
-    print(f"  mean_fit_error_ms = {fit_error_ms.mean():.3f}")
-    print(f"  max_fit_error_ms  = {fit_error_ms.max():.3f}")
-
-    print(
-        "\nKết luận:\n"
-        "- hop_estimate chỉ dùng để kiểm tra frame spacing.\n"
-        "- Không dùng peak activation để suy ra receptive field tuyệt đối.\n"
-        "- Không cập nhật MODEL_GRID nếu error_ms còn lớn hoặc offset chưa ổn định.\n"
-        "- frame_duration_sec cần một phép đo receptive field riêng, không lấy activation_span_frames của test này làm ground truth."
-    )
+    print(f"\nT == conv_output_frames(N): {'PASS' if not bad_t else f'FAIL ({len(bad_t)} case)'}")
+    print(f"residual: mean={res.mean():.2f} ms, std={res.std():.2f} ms, "
+          f"min={res.min():.2f}, max={res.max():.2f}")
+    print(f"drift: {slope_ms_per_10s:+.2f} ms / 10 s (kỳ vọng ~0)")
 
 
 if __name__ == "__main__":

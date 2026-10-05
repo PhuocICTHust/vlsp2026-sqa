@@ -1,4 +1,5 @@
 import math
+import numpy as np
 
 from sqa.frame_grid import EvaluatorGrid, ModelFrameGrid
 
@@ -37,3 +38,46 @@ def test_evaluator_grid_is_separate_instance_from_model_grid():
     mg = ModelFrameGrid()
     assert eg is not mg
     assert not hasattr(eg, "frame_duration_sec")  # EvaluatorGrid không có khái niệm receptive field
+
+
+from sqa.frame_grid import (  # noqa: E402
+    MODEL_GRID,
+    SAMPLE_RATE,
+    WAVLM_HOP_SAMPLES,
+    WAVLM_RECEPTIVE_FIELD_SAMPLES,
+    conv_output_frames,
+    conv_stack_geometry,
+    intervals_to_model_frame_targets,
+)
+
+
+def test_wavlm_conv_geometry_is_320_hop_400_receptive_field():
+    assert conv_stack_geometry() == (320, 400)
+    assert (WAVLM_HOP_SAMPLES, WAVLM_RECEPTIVE_FIELD_SAMPLES) == (320, 400)
+
+
+def test_model_grid_hop_is_exactly_20ms_and_offset_zero():
+    assert MODEL_GRID.frame_hop_sec * SAMPLE_RATE == 320
+    assert MODEL_GRID.frame_hop_sec == EvaluatorGrid().frame_hop_sec
+    assert MODEL_GRID.offset_sec == 0.0
+    assert MODEL_GRID.source == "theoretical_conv_stride_320"
+
+
+def test_conv_output_frames_matches_hf_formula():
+    def hf(n):
+        for k, s in zip((10, 3, 3, 3, 3, 2, 2), (5, 2, 2, 2, 2, 2, 2)):
+            n = (n - k) // s + 1
+        return max(n, 0)
+
+    for n in [399, 400, 401, 719, 720, 16_000, 16_001, 48_000, 160_000, 480_123]:
+        assert conv_output_frames(n) == hf(n), n
+
+
+def test_model_frame_targets_float_safe_on_rounded_boundaries():
+    t = intervals_to_model_frame_targets([[0.58, 0.62]], n_frames=40, grid=MODEL_GRID)
+    assert np.flatnonzero(t).tolist() == [29, 30]
+
+
+def test_model_frame_targets_clip_and_ignore_degenerate():
+    t = intervals_to_model_frame_targets([[0.9, 5.0], [0.3, 0.3], [0.5, 0.2]], n_frames=50, grid=MODEL_GRID)
+    assert np.flatnonzero(t).tolist() == list(range(45, 50))

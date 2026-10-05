@@ -162,3 +162,10 @@ def test_final_score_formula():
     assert math.isclose(final_score(0.0, 0.0, 0.0), 0.0)
     assert math.isclose(final_score(0.5, 0.5, 0.5), 0.5)
     assert math.isclose(final_score(1.0, 0.0, 0.0), 0.40)
+
+
+def test_mask_float_safe_on_two_decimal_boundaries():
+    for k in range(0, 1500):
+        start = round(k * 0.02, 2)
+        mask = intervals_to_frame_mask([[start, round(start + 0.04, 2)]], duration=31.0, grid=GRID)
+        assert np.flatnonzero(mask).tolist() == [k, k + 1], start

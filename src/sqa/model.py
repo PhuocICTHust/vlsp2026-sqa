@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import WavLMModel
 
-
+from .frame_head import FaultFrameHead
 class WavLMBackbone(nn.Module):
 
     def __init__(self, model_name: str = "microsoft/wavlm-large", freeze: bool = True):
@@ -16,7 +16,11 @@ class WavLMBackbone(nn.Module):
             for p in self.backbone.parameters():
                 p.requires_grad = False
         self.freeze = freeze
-
+    def train(self, mode: bool = True):
+        super().train(mode)
+        if self.freeze:
+            self.backbone.eval()
+        return self
     def forward(self, wav: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
         ctx = torch.no_grad() if self.freeze else torch.enable_grad()
         with ctx:
@@ -163,37 +167,40 @@ def quality_loss(
     return loss
 
 
-class StubFaultHead(nn.Module):
+# class StubFaultHead(nn.Module):
 
-    def __init__(self, hidden_size: int, n_fault_types: int = 3):
-        super().__init__()
-        self.proj = nn.Linear(hidden_size, n_fault_types)
+#     def __init__(self, hidden_size: int, n_fault_types: int = 3):
+#         super().__init__()
+#         self.proj = nn.Linear(hidden_size, n_fault_types)
 
-    def forward(self, h: torch.Tensor) -> torch.Tensor:
-        logits = self.proj(h)  # [B,T,3] — random init, CHƯA train
-        return torch.sigmoid(logits)
+#     def forward(self, h: torch.Tensor) -> torch.Tensor:
+#         logits = self.proj(h)  # [B,T,3] — random init, CHƯA train
+#         return torch.sigmoid(logits)
 
 
 class SQAModel(nn.Module):
-    def __init__(self, model_name: str = "microsoft/wavlm-large", freeze_backbone: bool = True):
+    def __init__(self, model_name: str = "microsoft/wavlm-large", freeze_backbone: bool = True, fault_head_kwargs: dict | None = None,backbone: nn.Module | None = None):
         super().__init__()
-        self.backbone = WavLMBackbone(model_name, freeze=freeze_backbone)
+        self.backbone = backbone if backbone is not None else WavLMBackbone(model_name, freeze=freeze_backbone)
         self.quality_head = QualityHead(self.backbone.hidden_size)
-        self.fault_head = StubFaultHead(self.backbone.hidden_size)  # TODO: thay bằng head thật của Thảo
+        self.fault_head = FaultFrameHead(self.backbone.hidden_size, **(fault_head_kwargs or {}))
 
     def forward(
             self,
             wav: torch.Tensor,
             attention_mask: torch.Tensor | None = None,
+            return_fault_logits: bool = False,
     ):
         h = self.backbone(wav, attention_mask)  # [B,T,H]
 
         if attention_mask is not None:
             valid_mask = self.backbone.frame_valid_mask(attention_mask)
+            if valid_mask.shape != h.shape[:2]:
+                raise ValueError(f"frame_valid_mask {tuple(valid_mask.shape)} lệch hidden {tuple(h.shape[:2])}")
         else:
             valid_mask = None
 
         quality = self.quality_head(h, valid_mask)  # [B]
-        fault_probs = self.fault_head(h)  # [B,T,3]
-
-        return quality, fault_probs, h
+        fault_logits = self.fault_head(h, valid_mask)  # [B,T,F]
+        fault_out = fault_logits if return_fault_logits else torch.sigmoid(fault_logits)
+        return quality, fault_out, h

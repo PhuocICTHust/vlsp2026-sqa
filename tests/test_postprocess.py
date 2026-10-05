@@ -1,3 +1,5 @@
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -99,9 +101,7 @@ def test_frame_probs_to_intervals_uses_real_duration_not_estimate():
 def test_baseline_never_uses_presence_gate():
     # xác suất thấp đều nhưng có 1 frame vượt threshold trực tiếp
     probs = np.array([0.1, 0.1, 0.6, 0.1])
-    intervals, p_presence, branch, raw = predict_fault_type(
-        probs, GRID, duration=0.08, tau_frame=0.5, min_duration=0.0, config=BASELINE_POSTPROCESS
-    )
+    intervals, p_presence, branch, raw = predict_fault_type(probs, GRID, duration=0.08, config=BASELINE_POSTPROCESS)
     assert branch in ("direct", "no_evidence")  # KHÔNG BAO GIỜ "presence_low" khi baseline
     assert intervals == [[0.04, 0.06]]
 
@@ -124,12 +124,15 @@ def test_baseline_returns_empty_when_no_frame_crosses_threshold():
 def test_whole_file_fallback_never_happens():
     # Toàn bộ config bật, xác suất cực thấp everywhere -> vẫn KHÔNG được đoán [[0, duration]]
     full_config = PostProcessConfig(
-        use_presence_gate=True, use_relax_threshold=True, use_relax_min_duration=True, use_peak_window=True
+        use_presence_gate=True,
+        use_relax_threshold=True,
+        use_relax_min_duration=True,
+        use_peak_window=True,
+        tau_presence=0.9,
+        tau_peak_min=0.9,
     )
     probs = np.full(20, 0.01)
-    intervals, _p, branch, _raw = predict_fault_type(
-        probs, GRID, duration=0.4, tau_presence=0.9, tau_peak_min=0.9, config=full_config
-    )
+    intervals, _p, branch, _raw = predict_fault_type(probs, GRID, duration=0.4, config=full_config)
     assert intervals != [[0.0, 0.4]]
     assert intervals == []
 
@@ -137,10 +140,8 @@ def test_whole_file_fallback_never_happens():
 
 def test_peak_window_at_first_frame_stays_within_bounds():
     probs = np.array([0.9, 0.05, 0.05, 0.05])
-    cfg = PostProcessConfig(use_presence_gate=False, use_peak_window=True)
-    intervals, _p, branch, _raw = predict_fault_type(
-        probs, GRID, duration=0.08, tau_frame=0.99, tau_peak_min=0.5, config=cfg
-    )
+    cfg = PostProcessConfig(use_peak_window=True, tau_frame=0.99, tau_peak_min=0.5)
+    intervals, _p, branch, _raw = predict_fault_type(probs, GRID, duration=0.08, config=cfg)
     assert branch == "peak_window"
     assert intervals[0][0] >= 0.0
     assert intervals[0][1] <= 0.08
@@ -148,19 +149,86 @@ def test_peak_window_at_first_frame_stays_within_bounds():
 
 def test_peak_window_at_last_frame_stays_within_bounds():
     probs = np.array([0.05, 0.05, 0.05, 0.9])
-    cfg = PostProcessConfig(use_presence_gate=False, use_peak_window=True)
-    intervals, _p, branch, _raw = predict_fault_type(
-        probs, GRID, duration=0.08, tau_frame=0.99, tau_peak_min=0.5, config=cfg
-    )
+    cfg = PostProcessConfig(use_peak_window=True, tau_frame=0.99, tau_peak_min=0.5)
+    intervals, _p, branch, _raw = predict_fault_type(probs, GRID, duration=0.08, config=cfg)
     assert branch == "peak_window"
     assert intervals[0][1] <= 0.08
 
 
 def test_peak_window_tiny_sequence_one_frame():
     probs = np.array([0.9])
-    cfg = PostProcessConfig(use_presence_gate=False, use_peak_window=True)
-    intervals, _p, branch, _raw = predict_fault_type(
-        probs, GRID, duration=0.02, tau_frame=0.99, tau_peak_min=0.5, config=cfg
-    )
+    cfg = PostProcessConfig(use_peak_window=True, tau_frame=0.99, tau_peak_min=0.5)
+    intervals, _p, branch, _raw = predict_fault_type(probs, GRID, duration=0.02, config=cfg)
     assert branch == "peak_window"
     assert 0.0 <= intervals[0][0] < intervals[0][1] <= 0.02
+
+
+
+
+def test_baseline_config_has_no_postprocessing():
+    assert BASELINE_POSTPROCESS.is_baseline
+    assert BASELINE_POSTPROCESS.min_duration == 0.0
+    assert BASELINE_POSTPROCESS.merge_gap == 0.0
+    assert BASELINE_POSTPROCESS.to_dict()["is_baseline"] is True
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"min_duration": 0.1},
+        {"merge_gap": 0.08},
+        {"use_presence_gate": True},
+        {"use_relax_threshold": True},
+        {"use_relax_min_duration": True},
+        {"use_peak_window": True},
+    ],
+)
+def test_any_heuristic_breaks_is_baseline(change):
+    assert not dataclasses.replace(BASELINE_POSTPROCESS, **change).is_baseline
+
+
+def test_changing_threshold_only_is_still_baseline():
+    assert dataclasses.replace(BASELINE_POSTPROCESS, tau_frame=0.3).is_baseline
+
+
+def test_baseline_keeps_short_runs_and_does_not_merge_gaps():
+    probs = np.array([0.9, 0.1, 0.9, 0.1, 0.1])
+    intervals, _p, branch, _raw = predict_fault_type(probs, GRID, duration=0.10)
+    assert branch == "direct"
+    assert intervals == [[0.0, 0.02], [0.04, 0.06]]
+
+
+def test_frame_probs_to_intervals_defaults_are_pure():
+    probs = np.array([0.9, 0.1, 0.9, 0.1, 0.1])
+    assert frame_probs_to_intervals(probs, GRID, duration=0.10) == [[0.0, 0.02], [0.04, 0.06]]
+
+
+def test_tier1_config_applies_explicit_min_duration_and_merge_gap():
+    cfg = dataclasses.replace(BASELINE_POSTPROCESS, merge_gap=0.03, min_duration=0.05)
+    probs = np.array([0.9, 0.1, 0.9, 0.1, 0.1])
+    intervals, _p, _b, _r = predict_fault_type(probs, GRID, duration=0.10, config=cfg)
+    assert intervals == [[0.0, 0.06]]
+
+
+@pytest.mark.parametrize(
+    "bad", [{"tau_frame": 1.5}, {"min_duration": -0.1}, {"merge_gap": -1}, {"presence_min_k": 0}]
+)
+def test_invalid_config_raises(bad):
+    with pytest.raises(ValueError):
+        PostProcessConfig(**bad)
+
+
+def test_old_keyword_thresholds_are_rejected():
+    with pytest.raises(TypeError):
+        predict_fault_type(np.array([0.9]), GRID, duration=0.02, min_duration=0.1)
+
+
+def test_resolve_config_per_fault_type():
+    from sqa.postprocess import resolve_config
+
+    noise_cfg = dataclasses.replace(BASELINE_POSTPROCESS, tau_frame=0.3)
+    per_type = {"noise": noise_cfg, "distortion": BASELINE_POSTPROCESS, "unnatural_pause": BASELINE_POSTPROCESS}
+    assert resolve_config(per_type, "noise") is noise_cfg
+    assert resolve_config(BASELINE_POSTPROCESS, "noise") is BASELINE_POSTPROCESS
+    with pytest.raises(KeyError):
+        resolve_config({"noise": noise_cfg}, "distortion")
