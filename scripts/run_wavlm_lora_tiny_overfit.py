@@ -67,7 +67,7 @@ MODEL_NAME = "microsoft/wavlm-large"
 
 BATCH_SIZE = 2
 
-STEPS = 100
+STEPS = 1000
 
 LORA_R = 8
 

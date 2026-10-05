@@ -74,14 +74,15 @@ class AttentionPool(nn.Module):
 
 class QualityHead(nn.Module):
 
-    def __init__(self, hidden_size: int, mlp_hidden: int = 256):
+    def __init__(self, hidden_size: int, mlp_hidden: int = 256, dropout: float = 0.0):
         super().__init__()
         self.pool = AttentionPool(hidden_size)
-        self.mlp = nn.Sequential(
-            nn.Linear(hidden_size, mlp_hidden),
-            nn.ReLU(),
-            nn.Linear(mlp_hidden, 1),
-        )
+        layers = [nn.Linear(hidden_size, mlp_hidden)]
+        if dropout > 0.0:
+            layers.append(nn.Dropout(dropout))
+        layers.append(nn.ReLU())
+        layers.append(nn.Linear(mlp_hidden, 1))
+        self.mlp = nn.Sequential(*layers)
 
     def forward(self, h: torch.Tensor, valid_mask: torch.Tensor | None = None) -> torch.Tensor:
         pooled = self.pool(h, valid_mask)  # [B,H]
@@ -124,10 +125,46 @@ def concordance_correlation_coefficient(
     return (2.0 * covariance) / (denominator + 1e-8)
 
 
-def quality_loss(pred: torch.Tensor, gt: torch.Tensor, w_mse: float = 0.5, w_ccc: float = 0.5) -> torch.Tensor:
+def pearson_correlation(
+    pred: torch.Tensor,
+    gt: torch.Tensor,
+) -> torch.Tensor:
+    pred = pred.reshape(-1)
+    gt = gt.reshape(-1)
+
+    if pred.numel() != gt.numel():
+        raise ValueError(
+            f"pred and gt must have the same number of elements, "
+            f"got {pred.numel()} and {gt.numel()}"
+        )
+
+    if pred.numel() < 2:
+        return pred.new_zeros(())
+
+    pred_c = pred - pred.mean()
+    gt_c = gt - gt.mean()
+    denom = torch.sqrt(
+        (pred_c.square().sum() * gt_c.square().sum()).clamp_min(1e-12)
+    )
+    return pred_c.mul(gt_c).sum() / denom
+
+
+def quality_loss(
+    pred: torch.Tensor,
+    gt: torch.Tensor,
+    w_mse: float = 0.5,
+    w_ccc: float = 0.5,
+    w_pcc: float = 0.0,
+) -> torch.Tensor:
     mse = F.mse_loss(pred, gt)
-    ccc = concordance_correlation_coefficient(pred, gt)
-    return w_mse * mse + w_ccc * (1 - ccc)
+    loss = w_mse * mse
+    if w_ccc > 0.0:
+        ccc = concordance_correlation_coefficient(pred, gt)
+        loss = loss + w_ccc * (1.0 - ccc)
+    if w_pcc > 0.0:
+        pcc = pearson_correlation(pred, gt)
+        loss = loss + w_pcc * (1.0 - pcc)
+    return loss
 
 
 # class StubFaultHead(nn.Module):
