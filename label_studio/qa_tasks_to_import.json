@@ -1,0 +1,920 @@
+[
+  {
+    "data": {
+      "file_id": "sys06tts-0000030.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sys06tts-0000030.wav",
+      "duration": 9.86,
+      "fault_type": "noise",
+      "candidate_id": "cross_field_01_noise",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "unknown",
+      "description": "[AUDIT TARGET #1] Fault type: NOISE | Proposed status: unknown\n• Raw text in noise column: 'not distorted'\n• Rationale & Acoustic grounds: Copy-paste error from the distortion column. No descriptive noise metadata available.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: not distorted\n• Distortion description: There is the echo from the recorder 0-9.8s\n• Unnatural pause: very smooth\n• Overall quality: 4 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_noise",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "unknown"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Copy-paste error from the distortion column. No descriptive noise metadata available."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sysnists-0000055.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sysnists-0000055.wav",
+      "duration": 10.0,
+      "fault_type": "noise",
+      "candidate_id": "cross_field_02_noise",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "unknown",
+      "description": "[AUDIT TARGET #2] Fault type: NOISE | Proposed status: unknown\n• Raw text in noise column: 'Very smooth'\n• Rationale & Acoustic grounds: \"Very smooth\" describes pause smoothness; it does not evaluate background noise.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: Very smooth\n• Distortion description: Very smooth\n• Unnatural pause: 1.5-2.5s, 5.8-6.4s\n• Overall quality: 4 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_noise",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "unknown"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "\"Very smooth\" describes pause smoothness; it does not evaluate background noise."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sys36d71-utt9a1e7c8.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sys36d71-utt9a1e7c8.wav",
+      "duration": 3.95,
+      "fault_type": "noise",
+      "candidate_id": "cross_field_03_noise",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "unknown",
+      "description": "[AUDIT TARGET #3] Fault type: NOISE | Proposed status: unknown\n• Raw text in noise column: 'Very smooth'\n• Rationale & Acoustic grounds: \"Very smooth\" describes pause smoothness; it does not evaluate background noise.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: Very smooth\n• Distortion description: There is pitch distortion with mechanical sound in the audio from 0 to 3.6 seconds\n• Unnatural pause: Very smooth\n• Overall quality: 2 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_noise",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "unknown"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "\"Very smooth\" describes pause smoothness; it does not evaluate background noise."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "syscfed8-uttfd1cec4.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/syscfed8-uttfd1cec4.wav",
+      "duration": 2.78,
+      "fault_type": "noise",
+      "candidate_id": "cross_field_04_noise",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "unknown",
+      "description": "[AUDIT TARGET #4] Fault type: NOISE | Proposed status: unknown\n• Raw text in noise column: 'not distorted'\n• Rationale & Acoustic grounds: Copy-paste error from the distortion column to the noise column.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: not distorted\n• Distortion description: There is pitch distortion with intermittent electric current quality and crackling and buzzing 0-2.7s\n• Unnatural pause: Very smooth\n• Overall quality: 4 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_noise",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "unknown"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Copy-paste error from the distortion column to the noise column."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sysnists-0000055.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sysnists-0000055.wav",
+      "duration": 10.0,
+      "fault_type": "distortion",
+      "candidate_id": "cross_field_05_distortion",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "unknown",
+      "description": "[AUDIT TARGET #5] Fault type: DISTORTION | Proposed status: unknown\n• Raw text in distortion column: 'Very smooth'\n• Rationale & Acoustic grounds: \"Very smooth\" neither confirms nor denies speech distortion.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: Very smooth\n• Distortion description: Very smooth\n• Unnatural pause: 1.5-2.5s, 5.8-6.4s\n• Overall quality: 4 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_distortion",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "unknown"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "\"Very smooth\" neither confirms nor denies speech distortion."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sysnists-0000056.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sysnists-0000056.wav",
+      "duration": 8.0,
+      "fault_type": "distortion",
+      "candidate_id": "cross_field_06_distortion",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "unknown",
+      "description": "[AUDIT TARGET #6] Fault type: DISTORTION | Proposed status: unknown\n• Raw text in distortion column: 'Very smooth'\n• Rationale & Acoustic grounds: \"Very smooth\" neither confirms nor denies speech distortion.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: There is outdoor sound in the audio from 0 to 7.5 seconds\n• Distortion description: Very smooth\n• Unnatural pause: Very smooth\n• Overall quality: 4 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_distortion",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "unknown"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "\"Very smooth\" neither confirms nor denies speech distortion."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sysnists-0000219.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sysnists-0000219.wav",
+      "duration": 10.0,
+      "fault_type": "distortion",
+      "candidate_id": "cross_field_07_distortion",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "absent",
+      "description": "[AUDIT TARGET #7] Fault type: DISTORTION | Proposed status: absent\n• Raw text in distortion column: 'not noticeable'\n• Rationale & Acoustic grounds: Explicit negation: no noticeable distortion heard (equivalent to not distorted).\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: not noticeable\n• Distortion description: not noticeable\n• Unnatural pause: very smooth\n• Overall quality: 5 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_distortion",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "absent"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Explicit negation: no noticeable distortion heard (equivalent to not distorted)."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sysnists-0000250.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sysnists-0000250.wav",
+      "duration": 10.0,
+      "fault_type": "distortion",
+      "candidate_id": "cross_field_08_distortion",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "absent",
+      "description": "[AUDIT TARGET #8] Fault type: DISTORTION | Proposed status: absent\n• Raw text in distortion column: 'not noticeable'\n• Rationale & Acoustic grounds: Explicit negation: no noticeable distortion heard (equivalent to not distorted).\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: there is background noise similar to grating in the audio from 6-8s\n• Distortion description: not noticeable\n• Unnatural pause: very smooth\n• Overall quality: 4 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_distortion",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "absent"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Explicit negation: no noticeable distortion heard (equivalent to not distorted)."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sysnists-0002332.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sysnists-0002332.wav",
+      "duration": 11.0,
+      "fault_type": "distortion",
+      "candidate_id": "cross_field_09_distortion",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "absent",
+      "description": "[AUDIT TARGET #9] Fault type: DISTORTION | Proposed status: absent\n• Raw text in distortion column: 'not noticeable'\n• Rationale & Acoustic grounds: Explicit negation: no noticeable distortion heard (equivalent to not distorted).\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: there is a noise from the music playing and human laughing and chickens from 0-10.5s\n• Distortion description: not noticeable\n• Unnatural pause: 1-5s\n• Overall quality: 3 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_distortion",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "absent"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Explicit negation: no noticeable distortion heard (equivalent to not distorted)."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sysead26-utt6676bf8.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sysead26-utt6676bf8.wav",
+      "duration": 3.02,
+      "fault_type": "distortion",
+      "candidate_id": "cross_field_10_distortion",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "absent",
+      "description": "[AUDIT TARGET #10] Fault type: DISTORTION | Proposed status: absent\n• Raw text in distortion column: 'not noticeable'\n• Rationale & Acoustic grounds: Explicit negation: no noticeable distortion heard (equivalent to not distorted).\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: not noticeable\n• Distortion description: not noticeable\n• Unnatural pause: 0.5-1.5s\n• Overall quality: 3 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_distortion",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "absent"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Explicit negation: no noticeable distortion heard (equivalent to not distorted)."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sys174d8-uttcd68ec5.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sys174d8-uttcd68ec5.wav",
+      "duration": 3.33,
+      "fault_type": "distortion",
+      "candidate_id": "cross_field_11_distortion",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "absent",
+      "description": "[AUDIT TARGET #11] Fault type: DISTORTION | Proposed status: absent\n• Raw text in distortion column: 'Not noticeable'\n• Rationale & Acoustic grounds: Explicit negation: no noticeable distortion heard (equivalent to not distorted).\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: There is outdoor background noise similar to be on a train in the audio from 0s to 3.3s\n• Distortion description: Not noticeable\n• Unnatural pause: There is a continuous distortion with mechanical sound in the audio from 0.2s to 3.3s\n• Overall quality: 3 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_distortion",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "absent"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Explicit negation: no noticeable distortion heard (equivalent to not distorted)."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sys01tts-0000005.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sys01tts-0000005.wav",
+      "duration": 6.43,
+      "fault_type": "unnatural_pause",
+      "candidate_id": "cross_field_12_unnatural_pause",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "unknown",
+      "description": "[AUDIT TARGET #12] Fault type: UNNATURAL_PAUSE | Proposed status: unknown\n• Raw text in unnatural_pause column: 'Not distorted'\n• Rationale & Acoustic grounds: Copy-paste error from the distortion column. Pause quality has not been evaluated.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: Not noticeable\n• Distortion description: Not distorted\n• Unnatural pause: Not distorted\n• Overall quality: 4 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_unnatural_pause",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "unknown"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Copy-paste error from the distortion column. Pause quality has not been evaluated."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sys0giga-0000269.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sys0giga-0000269.wav",
+      "duration": 7.5,
+      "fault_type": "unnatural_pause",
+      "candidate_id": "cross_field_13_unnatural_pause",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "absent",
+      "description": "[AUDIT TARGET #13] Fault type: UNNATURAL_PAUSE | Proposed status: absent\n• Raw text in unnatural_pause column: 'not noticeable'\n• Rationale & Acoustic grounds: Explicit negation: no noticeable unnatural pauses heard.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: not noticeable\n• Distortion description: not distorted\n• Unnatural pause: not noticeable\n• Overall quality: 4 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_unnatural_pause",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "absent"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Explicit negation: no noticeable unnatural pauses heard."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sys0giga-0000936.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sys0giga-0000936.wav",
+      "duration": 1.14,
+      "fault_type": "unnatural_pause",
+      "candidate_id": "cross_field_14_unnatural_pause",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "absent",
+      "description": "[AUDIT TARGET #14] Fault type: UNNATURAL_PAUSE | Proposed status: absent\n• Raw text in unnatural_pause column: 'not noticeable'\n• Rationale & Acoustic grounds: Explicit negation: no noticeable unnatural pauses heard.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: There is a sound of talking in the audio from 0 to 1.2 seconds\n• Distortion description: not distorted\n• Unnatural pause: not noticeable\n• Overall quality: 4 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_unnatural_pause",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "absent"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Explicit negation: no noticeable unnatural pauses heard."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sysnists-0000287.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sysnists-0000287.wav",
+      "duration": 12.0,
+      "fault_type": "unnatural_pause",
+      "candidate_id": "cross_field_15_unnatural_pause",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "absent",
+      "description": "[AUDIT TARGET #15] Fault type: UNNATURAL_PAUSE | Proposed status: absent\n• Raw text in unnatural_pause column: 'Not noticeable'\n• Rationale & Acoustic grounds: Explicit negation: no noticeable unnatural pauses heard.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: There is buzzing sound in the audio from 0-12s\n• Distortion description: There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 1.1-12s\n• Unnatural pause: Not noticeable\n• Overall quality: 3 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_unnatural_pause",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "absent"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Explicit negation: no noticeable unnatural pauses heard."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sysdc2ac-uttf4f8ccf.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sysdc2ac-uttf4f8ccf.wav",
+      "duration": 7.88,
+      "fault_type": "unnatural_pause",
+      "candidate_id": "cross_field_16_unnatural_pause",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "unknown",
+      "description": "[AUDIT TARGET #16] Fault type: UNNATURAL_PAUSE | Proposed status: unknown\n• Raw text in unnatural_pause column: 'not distorted'\n• Rationale & Acoustic grounds: Copy-paste error from the distortion column to the unnatural pause column.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: not noticeable\n• Distortion description: not distorted\n• Unnatural pause: not distorted\n• Overall quality: 4 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_unnatural_pause",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "unknown"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Copy-paste error from the distortion column to the unnatural pause column."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sysc2927-uttfe7171e.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sysc2927-uttfe7171e.wav",
+      "duration": 4.36,
+      "fault_type": "unnatural_pause",
+      "candidate_id": "cross_field_17_unnatural_pause",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "absent",
+      "description": "[AUDIT TARGET #17] Fault type: UNNATURAL_PAUSE | Proposed status: absent\n• Raw text in unnatural_pause column: 'not noticeable'\n• Rationale & Acoustic grounds: Explicit negation: no noticeable unnatural pauses heard.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: not noticeable\n• Distortion description: There is pitch distortion with mechanical sound in the audio from 0.33 to 4.1 seconds\n• Unnatural pause: not noticeable\n• Overall quality: 3 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_unnatural_pause",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "absent"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Explicit negation: no noticeable unnatural pauses heard."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "file_id": "sys0ce8e-uttecc9a8a.wav",
+      "audio": "/data/local-files/?d=label_studio/sample_audio/qa_review/sys0ce8e-uttecc9a8a.wav",
+      "duration": 3.29,
+      "fault_type": "unnatural_pause",
+      "candidate_id": "cross_field_18_unnatural_pause",
+      "label_source": "cross_field_review",
+      "label_confidence": "manual_audit",
+      "candidate_status": "absent",
+      "description": "[AUDIT TARGET #18] Fault type: UNNATURAL_PAUSE | Proposed status: absent\n• Raw text in unnatural_pause column: 'Not noticeable'\n• Rationale & Acoustic grounds: Explicit negation: no noticeable unnatural pauses heard.\n\n[SAMPLE METADATA CONTEXT]:\n• Noise Description: Not noticeable\n• Distortion description: Not distorted\n• Unnatural pause: Not noticeable\n• Overall quality: 5 / 5",
+      "has_audio": true
+    },
+    "predictions": [
+      {
+        "model_version": "qa_resolution_draft_hieu",
+        "result": [
+          {
+            "from_name": "status_unnatural_pause",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "absent"
+              ]
+            }
+          },
+          {
+            "from_name": "dsp_decision",
+            "to_name": "audio",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "not_applicable"
+              ]
+            }
+          },
+          {
+            "from_name": "audit_notes",
+            "to_name": "audio",
+            "type": "textarea",
+            "value": {
+              "text": [
+                "Explicit negation: no noticeable unnatural pauses heard."
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

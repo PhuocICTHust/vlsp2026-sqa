@@ -1,0 +1,88 @@
+<View>
+  <Header value="VLSP 2026 Speech Quality Assessment — Fault Audit &amp; Annotation" />
+
+  <View style="box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 16px; border-radius: 8px; margin-bottom: 16px; background: #fafafa;">
+    <Text name="file_info" value="File: $file_id | Candidate: $candidate_id | Fault type: $fault_type | Duration: $duration s" />
+    <Text name="source_info" value="Source: $label_source | Confidence: $label_confidence | Candidate Status: $candidate_status" />
+    <Text name="description_info" value="Original Description / Evidence: $description" />
+  </View>
+
+  <!-- Audio Player & Waveform Interval Annotation -->
+  <Audio name="audio" value="$audio" sync="audio" zoom="true" hotkey="space" />
+
+  <Header value="1. Temporal Fault Intervals" size="5" />
+  <Labels name="fault_labels" toName="audio">
+    <Label value="noise" background="#F5222D" hotkey="1" />
+    <Label value="distortion" background="#FA8C16" hotkey="2" />
+    <Label value="unnatural_pause" background="#1890FF" hotkey="3" />
+  </Labels>
+
+  <!-- Reviewer's assessment per fault type -->
+  <Header value="2. Reviewer Assessment per Fault Type" size="5" />
+  <View style="display: flex; gap: 20px; margin-top: 10px;">
+    <View style="flex: 1; border: 1px solid #e8e8e8; padding: 12px; border-radius: 6px;">
+      <Header value="NOISE" size="6" />
+      <Choices name="status_noise" toName="audio" choice="single" showInline="true">
+        <Choice value="absent" hint="No noise heard anywhere in the audio" />
+        <Choice value="localized" hint="Noise present and intervals have been placed" />
+        <Choice value="present_unknown_time" hint="Noise is definitely present but cannot be localized" />
+        <Choice value="unknown" hint="Insufficient evidence" />
+      </Choices>
+    </View>
+
+    <View style="flex: 1; border: 1px solid #e8e8e8; padding: 12px; border-radius: 6px;">
+      <Header value="DISTORTION" size="6" />
+      <Choices name="status_distortion" toName="audio" choice="single" showInline="true">
+        <Choice value="absent" hint="No distortion/clipping present" />
+        <Choice value="localized" hint="Distortion present and intervals have been placed" />
+        <Choice value="present_unknown_time" hint="Distortion is definitely present but cannot be localized" />
+        <Choice value="unknown" hint="Insufficient evidence" />
+      </Choices>
+    </View>
+
+    <View style="flex: 1; border: 1px solid #e8e8e8; padding: 12px; border-radius: 6px;">
+      <Header value="UNNATURAL PAUSE" size="6" />
+      <Choices name="status_unnatural_pause" toName="audio" choice="single" showInline="true">
+        <Choice value="absent" hint="No unnatural pauses present" />
+        <Choice value="localized" hint="Unnatural pause present and intervals have been placed" />
+        <Choice value="present_unknown_time" hint="Unnatural pause is definitely present but cannot be localized" />
+        <Choice value="unknown" hint="Insufficient evidence" />
+      </Choices>
+    </View>
+  </View>
+
+  <!-- DSP Candidate Decision -->
+  <View style="margin-top: 20px; padding: 12px; border: 1px solid #e8e8e8; background: #f0f0f0; border-radius: 6px;">
+    <Header value="3. DSP Candidate Decision" size="5" />
+    <Choices name="dsp_decision" toName="audio" choice="single" showInline="true"
+             required="true" requiredMessage="A decision for this candidate is required">
+      <Choice value="accepted" hotkey="a" hint="Correct fault type clearly heard, DSP interval is correct, no edits needed" />
+      <Choice value="accepted_edited" hotkey="e" hint="Real fault, but boundaries were adjusted / intervals deleted or added" />
+      <Choice value="rejected" hotkey="r" hint="Not a fault, wrong type, or corrupted file → keep the previous fault_status" />
+      <Choice value="unsure" hotkey="u" hint="Still unsure after listening twice → send to a second reviewer (maps to pending in the DB)" />
+      <Choice value="not_applicable" hotkey="n" hint="Sample is not a DSP candidate (used only when auditing regex/LLM sources)" />
+    </Choices>
+  </View>
+
+  <!-- Reason code: shown only when rejected or unsure -->
+  <View style="margin-top: 20px;" visibleWhen="choice-selected" whenTagName="dsp_decision" whenChoiceValue="rejected,unsure">
+    <Header value="4. Reason Code" size="5" />
+    <Choices name="reason" toName="audio" choice="single" showInline="true"
+             required="true" requiredMessage="A reason code is required when rejecting or marking unsure">
+      <Choice value="no_fault_heard" hint="No fault of the candidate's type is audible" />
+      <Choice value="wrong_type" hint="A real fault exists but of a different type → write the actual type in the note" />
+      <Choice value="normal_speech" hint="Natural speech characteristic misread by DSP as a fault (breath pause, fricatives, breathing)" />
+      <Choice value="bad_audio" hint="Corrupted, truncated, or unplayable file, or length does not match duration" />
+      <Choice value="boundary_unfixable" hint="Fault is certainly present but no reliable boundary can be set → explain in the note" />
+      <Choice value="ambiguous" hint="Cannot decide whether a fault exists" />
+      <Choice value="conflict_with_other_source" hint="DSP and LLM/regex disagree and there is no basis to pick one" />
+    </Choices>
+  </View>
+
+  <!-- Evidence & Override Reason -->
+  <View style="margin-top: 20px;">
+    <Header value="5. Audit Notes &amp; Evidence" size="5" />
+    <TextArea name="audit_notes" toName="audio" rows="3"
+              placeholder="A note is required for: wrong_type (what is the actual type), boundary_unfixable (why), or accepted_edited (what was changed)..." />
+  </View>
+</View>

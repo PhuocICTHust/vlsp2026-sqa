@@ -19,11 +19,22 @@ venv/
 data/
 runs/
 cache/
+wavlm_cache/
+sample_audio/
 *.wav
 *.flac
+*.mp3
+*.ogg
+*.m4a
+*.opus
 *.pt
 *.ckpt
 *.npz
+
+# Personal documents and local Label Studio state
+/Document/
+/document/
+/label_studio/ls_data/
 
 # OS
 .DS_Store
