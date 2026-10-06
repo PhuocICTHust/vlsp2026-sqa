@@ -10,7 +10,7 @@ class WavLMBackbone(nn.Module):
 
     def __init__(self, model_name: str = "microsoft/wavlm-large", freeze: bool = True):
         super().__init__()
-        self.backbone = WavLMModel.from_pretrained(model_name)
+        self.backbone = WavLMModel.from_pretrained(model_name, use_safetensors=True)
         self.hidden_size = self.backbone.config.hidden_size
         if freeze:
             for p in self.backbone.parameters():

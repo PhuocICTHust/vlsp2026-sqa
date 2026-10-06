@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -373,6 +374,18 @@ def verify_pending_dataset_mapping(
 # ============================================================================
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="QualiSpeech WavLM representation cache")
+    default_csv = ROOT / "data" / "qualispeech" / "train_full.csv"
+    if not default_csv.exists():
+        default_csv = CSV_PATH
+    parser.add_argument("--csv-path", type=str, default=str(default_csv), help="Path to CSV dataset")
+    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE, help="Batch size for feature extraction")
+    parser.add_argument("--num-workers", type=int, default=NUM_WORKERS, help="DataLoader workers")
+    args = parser.parse_args()
+
+    csv_path = Path(args.csv_path)
+    batch_size = args.batch_size
+    num_workers = args.num_workers
 
     set_seed(SEED)
 
@@ -381,10 +394,11 @@ def main() -> None:
     print("=" * 72)
 
     print(f"Device:        {DEVICE}")
-    print(f"CSV:           {CSV_PATH}")
+    print(f"CSV:           {csv_path}")
     print(f"WAV directory: {WAV_DIR}")
     print(f"Cache:         {CACHE_ROOT}")
     print(f"Model:         {MODEL_NAME}")
+    print(f"Batch size:    {batch_size}")
     print(f"Tiny only:     {CACHE_TINY_ONLY}")
     print()
 
@@ -392,9 +406,9 @@ def main() -> None:
     # Check paths
     # ------------------------------------------------------------------------
 
-    if not CSV_PATH.exists():
+    if not csv_path.exists():
         raise FileNotFoundError(
-            f"CSV not found:\n{CSV_PATH}"
+            f"CSV not found:\n{csv_path}"
         )
 
     if not WAV_DIR.exists():
@@ -406,7 +420,7 @@ def main() -> None:
     # Load CSV
     # ------------------------------------------------------------------------
 
-    df = pd.read_csv(CSV_PATH)
+    df = pd.read_csv(csv_path)
 
     if "id" not in df.columns:
         raise RuntimeError(
@@ -693,7 +707,7 @@ def main() -> None:
         # --------------------------------------------------------------------
 
         dataset = QualiSpeechDataset(
-            csv_path=CSV_PATH,
+            csv_path=csv_path,
             wav_dir=WAV_DIR,
             indices=pending_indices,
         )
@@ -750,9 +764,9 @@ def main() -> None:
 
         loader = DataLoader(
             dataset,
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             shuffle=False,
-            num_workers=NUM_WORKERS,
+            num_workers=num_workers,
             collate_fn=qualispeech_collate,
         )
 
