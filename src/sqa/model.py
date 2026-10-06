@@ -89,6 +89,16 @@ class QualityHead(nn.Module):
         raw = self.mlp(pooled).squeeze(-1)  # [B]
         return torch.sigmoid(raw) * 4.0 + 1.0  # scale [1,5]
 
+    def load_state_dict(self, state_dict: dict[str, torch.Tensor], strict: bool = True):
+        adapted = dict(state_dict)
+        if "mlp.3.weight" in adapted and "mlp.2.weight" not in adapted and len(self.mlp) == 3:
+            adapted["mlp.2.weight"] = adapted.pop("mlp.3.weight")
+            adapted["mlp.2.bias"] = adapted.pop("mlp.3.bias")
+        elif "mlp.2.weight" in adapted and "mlp.3.weight" not in adapted and len(self.mlp) == 4:
+            adapted["mlp.3.weight"] = adapted.pop("mlp.2.weight")
+            adapted["mlp.3.bias"] = adapted.pop("mlp.2.bias")
+        return super().load_state_dict(adapted, strict=strict)
+
 
 def concordance_correlation_coefficient(
     pred: torch.Tensor,
@@ -183,7 +193,9 @@ class SQAModel(nn.Module):
         super().__init__()
         self.backbone = backbone if backbone is not None else WavLMBackbone(model_name, freeze=freeze_backbone)
         self.quality_head = QualityHead(self.backbone.hidden_size)
-        self.fault_head = FaultFrameHead(self.backbone.hidden_size, **(fault_head_kwargs or {}))
+        f_kwargs = dict(fault_head_kwargs) if fault_head_kwargs else {}
+        input_dim = f_kwargs.pop("input_dim", self.backbone.hidden_size)
+        self.fault_head = FaultFrameHead(input_dim, **f_kwargs)
 
     def forward(
             self,

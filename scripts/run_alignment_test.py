@@ -4,6 +4,12 @@ Chạy: python scripts/run_alignment_test.py
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 import numpy as np
 import torch
 

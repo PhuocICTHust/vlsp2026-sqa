@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import math
 import random
 import sys
@@ -245,7 +246,7 @@ class ManualLoRA(nn.Module):
 # ATTACH MANUAL LoRA
 # ======================================================================
 
-def attach_manual_lora(backbone):
+def attach_manual_lora(backbone, r: int = LORA_R, alpha: float = LORA_ALPHA):
     layers = backbone.encoder.layers
     if len(layers) != EXPECTED_WAVLM_LAYERS:
         raise RuntimeError(
@@ -270,8 +271,8 @@ def attach_manual_lora(backbone):
         q_lora = ManualLoRA(
             in_features=q_proj.in_features,
             out_features=q_proj.out_features,
-            r=LORA_R,
-            alpha=LORA_ALPHA,
+            r=r,
+            alpha=alpha,
         ).to(
             device=q_proj.weight.device,
             dtype=q_proj.weight.dtype,
@@ -280,8 +281,8 @@ def attach_manual_lora(backbone):
         v_lora = ManualLoRA(
             in_features=v_proj.in_features,
             out_features=v_proj.out_features,
-            r=LORA_R,
-            alpha=LORA_ALPHA,
+            r=r,
+            alpha=alpha,
         ).to(
             device=v_proj.weight.device,
             dtype=v_proj.weight.dtype,
@@ -495,6 +496,7 @@ def train_one_epoch(
     epoch,
     global_step,
     scheduler=None,
+    grad_accum_steps=GRAD_ACCUM_STEPS,
 ):
     backbone.train()
     quality_head.train()
@@ -520,7 +522,7 @@ def train_one_epoch(
             accum_preds.append(pred)
             accum_targets.append(target)
 
-        if batch_idx % GRAD_ACCUM_STEPS == 0 or batch_idx == len(loader):
+        if batch_idx % grad_accum_steps == 0 or batch_idx == len(loader):
             preds_chunk = torch.cat(accum_preds)
             targets_chunk = torch.cat(accum_targets)
 
@@ -590,22 +592,37 @@ def train_one_epoch(
 # ======================================================================
 
 def main():
-    set_seed(SEED)
+    parser = argparse.ArgumentParser(description="WavLM LoRA Full Data Training")
+    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE, help="Batch size per GPU forward pass")
+    parser.add_argument("--grad-accum", type=int, default=GRAD_ACCUM_STEPS, help="Gradient accumulation steps")
+    parser.add_argument("--epochs", type=int, default=EPOCHS, help="Number of training epochs")
+    parser.add_argument("--num-workers", type=int, default=NUM_WORKERS, help="DataLoader worker processes")
+    parser.add_argument("--lora-r", type=int, default=LORA_R, help="LoRA rank")
+    parser.add_argument("--lora-alpha", type=float, default=LORA_ALPHA, help="LoRA alpha scaling factor")
+    parser.add_argument("--lr-lora", type=float, default=LR_LORA, help="Learning rate for LoRA weights")
+    parser.add_argument("--lr-head", type=float, default=LR_HEAD, help="Learning rate for Quality Head")
+    parser.add_argument("--seed", type=int, default=SEED, help="Random seed")
+    args = parser.parse_args()
+
+    set_seed(args.seed)
+
+    effective_bs = args.batch_size * args.grad_accum
 
     print("=" * 70)
-    print("WAVLM-LARGE + MANUAL LoRA — FULL DATA TRAINING (FIXED)")
+    print("WAVLM-LARGE + MANUAL LoRA — FULL DATA TRAINING")
     print("=" * 70)
     print("Device:                 ", DEVICE)
     if DEVICE.type == "cuda":
         print("GPU:                    ", torch.cuda.get_device_name(0))
     print("Backbone:               ", MODEL_NAME)
-    print("Batch size:             ", BATCH_SIZE)
-    print("Gradient accumulation:  ", GRAD_ACCUM_STEPS)
-    print("Effective batch size:   ", BATCH_SIZE * GRAD_ACCUM_STEPS)
-    print("Epochs:                 ", EPOCHS)
+    print("Batch size:             ", args.batch_size)
+    print("Gradient accumulation:  ", args.grad_accum)
+    print("Effective batch size:   ", effective_bs)
+    print("Epochs:                 ", args.epochs)
+    print("Num workers:            ", args.num_workers)
     print("Validation ratio:       ", VAL_RATIO)
-    print("LoRA rank / alpha:      ", f"{LORA_R} / {LORA_ALPHA}")
-    print("LoRA LR / Head LR:      ", f"{LR_LORA} / {LR_HEAD}")
+    print("LoRA rank / alpha:      ", f"{args.lora_r} / {args.lora_alpha}")
+    print("LoRA LR / Head LR:      ", f"{args.lr_lora} / {args.lr_head}")
     print("Weight decay:           ", WEIGHT_DECAY)
     print("Head dropout:           ", DROPOUT_HEAD)
     print("AMP:                    ", USE_AMP)
@@ -641,18 +658,18 @@ def main():
 
     train_loader = DataLoader(
         train_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=args.batch_size,
         shuffle=True,
-        num_workers=NUM_WORKERS,
+        num_workers=args.num_workers,
         pin_memory=(DEVICE.type == "cuda"),
         collate_fn=qualispeech_collate,
     )
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=args.batch_size,
         shuffle=False,
-        num_workers=NUM_WORKERS,
+        num_workers=args.num_workers,
         pin_memory=(DEVICE.type == "cuda"),
         collate_fn=qualispeech_collate,
     )
@@ -674,7 +691,7 @@ def main():
     freeze_backbone(backbone)
     disable_layerdrop(backbone)
 
-    target_names = attach_manual_lora(backbone)
+    target_names = attach_manual_lora(backbone, r=args.lora_r, alpha=args.lora_alpha)
     patch_wavlm_attention(backbone)
 
     if USE_GRADIENT_CHECKPOINTING:
@@ -699,13 +716,13 @@ def main():
 
     optimizer = torch.optim.AdamW(
         [
-            {"params": lora_params, "lr": LR_LORA},
-            {"params": head_params, "lr": LR_HEAD},
+            {"params": lora_params, "lr": args.lr_lora},
+            {"params": head_params, "lr": args.lr_head},
         ],
         weight_decay=WEIGHT_DECAY,
     )
 
-    total_steps = (len(train_loader) // GRAD_ACCUM_STEPS + 1) * EPOCHS
+    total_steps = (len(train_loader) // args.grad_accum + 1) * args.epochs
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
         T_max=total_steps,
@@ -739,7 +756,7 @@ def main():
     print("TRAINING LOOP")
     print("=" * 70)
 
-    for epoch in range(1, EPOCHS + 1):
+    for epoch in range(1, args.epochs + 1):
         train_loss, global_step = train_one_epoch(
             backbone,
             quality_head,
@@ -749,6 +766,7 @@ def main():
             epoch,
             global_step,
             scheduler=scheduler,
+            grad_accum_steps=args.grad_accum,
         )
 
         val_result = evaluate(backbone, quality_head, val_loader)
