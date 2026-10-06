@@ -130,7 +130,7 @@ def get_source(group: str) -> str:
     return "bvcc"
 
 
-def make_source_balanced_split(df: pd.DataFrame):
+def make_source_balanced_split(df: pd.DataFrame, val_ratio: float = VAL_RATIO):
     """Source-balanced split matching the cached full baselines (8446 train, 2112 val)."""
     rng = np.random.RandomState(SEED)
     train_parts = []
@@ -154,7 +154,7 @@ def make_source_balanced_split(df: pd.DataFrame):
             indices = np.arange(len(class_df))
             rng.shuffle(indices)
 
-            n_val = int(round(len(class_df) * VAL_RATIO))
+            n_val = int(round(len(class_df) * val_ratio))
             if len(class_df) >= 2:
                 n_val = max(1, min(n_val, len(class_df) - 1))
             else:
@@ -608,6 +608,8 @@ def main():
     parser.add_argument("--lr-lora", type=float, default=LR_LORA, help="Learning rate for LoRA weights")
     parser.add_argument("--lr-head", type=float, default=LR_HEAD, help="Learning rate for Quality Head")
     parser.add_argument("--seed", type=int, default=SEED, help="Random seed")
+    parser.add_argument("--csv-path", type=str, default=str(CSV_PATH), help="Path to CSV dataset")
+    parser.add_argument("--val-ratio", type=float, default=VAL_RATIO, help="Validation ratio")
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -637,7 +639,8 @@ def main():
     # ------------------------------------------------------------------
     # DATA PREPARATION (SOURCE-BALANCED)
     # ------------------------------------------------------------------
-    df = pd.read_csv(CSV_PATH)
+    csv_path = Path(args.csv_path)
+    df = pd.read_csv(csv_path)
     df["sample_id"] = (
         df["id"].astype(str).str.strip().str.replace(r"\.wav$", "", regex=True)
     )
@@ -645,12 +648,14 @@ def main():
     df["group"] = df["sample_id"].map(get_group)
     df["source"] = df["group"].map(get_source)
 
-    train_df, val_df = make_source_balanced_split(df)
-    if len(train_df) != 8446 or len(val_df) != 2112:
+    train_df, val_df = make_source_balanced_split(df, val_ratio=args.val_ratio)
+    if csv_path.name == "train.csv" and (len(train_df) != 8446 or len(val_df) != 2112):
         print(f"Warning: split count is {len(train_df)} / {len(val_df)} (expected 8446 / 2112).")
+    else:
+        print(f"Dataset: {csv_path.name} | Total: {len(df)} | Train: {len(train_df)} | Val: {len(val_df)}")
 
     full_dataset = QualiSpeechDataset(
-        csv_path=CSV_PATH,
+        csv_path=csv_path,
         wav_dir=WAV_DIR,
         indices=list(range(len(df))),
     )
