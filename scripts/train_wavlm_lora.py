@@ -687,7 +687,7 @@ def main():
     print("LOAD WAVLM-LARGE")
     print("=" * 70)
 
-    backbone = WavLMModel.from_pretrained(MODEL_NAME).to(DEVICE)
+    backbone = WavLMModel.from_pretrained(MODEL_NAME, use_safetensors=True).to(DEVICE)
     freeze_backbone(backbone)
     disable_layerdrop(backbone)
 
