@@ -1,0 +1,212 @@
+section,file_id,fault,raw_text,proposed,must_listen,decision,intervals,duration_s,note
+1 no speech,sysnists-0002781.wav,noise,can't hear a thing.,—,yes,absent,,10.0,"No speech, no noise, no distortion, no unnatural pause"
+1 no speech,sysnists-0002781.wav,distortion,can't hear a thing.,—,yes,absent,,10.0,"No speech, no noise, no distortion, no unnatural pause"
+1 no speech,sysnists-0002781.wav,unnatural_pause,can't hear a thing.,—,yes,absent,,10.0,"No speech, no noise, no distortion, no unnatural pause"
+1 no speech,sysnists-0002782.wav,noise,There is background rustle noise in the audio from 0 to 6 seconds.,0-6,yes,localized,0-end,6.0,"Have noise at [0-6s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002782.wav,distortion,can't hear a thing.,—,yes,absent,,6.0,"Have noise at [0-6s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002782.wav,unnatural_pause,can't hear a thing.,—,yes,absent,,6.0,"Have noise at [0-6s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002796.wav,noise,can't hear a thing.,—,yes,localized,0-end,10.0,"Have speech, have noise at [0-10s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002796.wav,distortion,can't hear a thing.,—,yes,absent,,10.0,"Have speech, have noise at [0-10s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002796.wav,unnatural_pause,can't hear a thing.,—,yes,absent,,10.0,"Have speech, have noise at [0-10s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002797.wav,noise,can't hear a thing.,—,yes,localized,0-end,8.0,"Have speech, have noise at [0-10s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002797.wav,distortion,can't hear a thing.,—,yes,absent,,8.0,"Have speech, have noise at [0-10s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002797.wav,unnatural_pause,can't hear a thing.,—,yes,absent,,8.0,"Have speech, have noise at [0-10s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002805.wav,noise,can't hear a thing.,—,yes,localized,1.2-end,8.0,"Have speech, have noise at [1.187-8s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002805.wav,distortion,can't hear a thing.,—,yes,absent,,8.0,"Have speech, have noise at [1.187-8s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002805.wav,unnatural_pause,can't hear a thing.,—,yes,absent,,8.0,"Have speech, have noise at [1.187-8s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002810.wav,noise,can't hear a thing.,—,yes,localized,0-end,7.0,"Have speech, have noise at [0-7s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002810.wav,distortion,can't hear a thing.,—,yes,absent,,7.0,"Have speech, have noise at [0-7s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002810.wav,unnatural_pause,can't hear a thing.,—,yes,absent,,7.0,"Have speech, have noise at [0-7s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002811.wav,noise,There is background racing noise in the audio from 0 to 6 seconds.,0-6,yes,localized,0-end,6.0,"Have noise at [0-6s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002811.wav,distortion,can't hear a thing.,—,yes,absent,,6.0,"Have speech, have noise at [0-7s], no distortion, no unnatural pause"
+1 no speech,sysnists-0002811.wav,unnatural_pause,can't hear a thing.,—,yes,absent,,6.0,"Have speech, have noise at [0-7s], no distortion, no unnatural pause"
+2 nisqa group,sysnistl-0000037.wav,unnatural_pause,7.5 seconds,7.5-end,no,accept,,8.0,Abruptly cutting off at [7.5-8.0s]
+2 nisqa group,sysnistl-0000043.wav,unnatural_pause,8.5 seconds.,8.5-end,no,,,,
+2 nisqa group,sysnistl-0000046.wav,unnatural_pause,"9.9 seconds,",9.9-end,no,,,,
+2 nisqa group,sysnistl-0000047.wav,unnatural_pause,9.9 seconds.,9.9-end,no,,,,
+2 nisqa group,sysnistl-0000048.wav,unnatural_pause,10.9 seconds.,10.9-end,no,,,,
+2 nisqa group,sysnistl-0000049.wav,unnatural_pause,10.9 seconds.,10.9-end,no,,,,
+2 nisqa group,sysnistl-0000050.wav,unnatural_pause,11.9 seconds.,11.9-end,yes,accept,,12.0,Abruptly cutting off at [11.9-12s]
+2 nisqa group,sysnistl-0000051.wav,unnatural_pause,11.9 seconds.,11.9-end,no,,,,
+2 nisqa group,sysnistl-0000053.wav,unnatural_pause,6.9 seconds.,6.9-end,yes,accept,,7.0,Abruptly cutting off at [6.9-7.0s]
+2 nisqa group,sysnistl-0000060.wav,unnatural_pause,6.9 seconds.,6.9-end,no,,,,
+2 nisqa group,sysnistl-0000061.wav,unnatural_pause,6.9 seconds.,6.9-end,no,,,,
+2 nisqa group,sysnistl-0000062.wav,unnatural_pause,8.9 seconds.,8.9-end,yes,accept,,9.0,Abruptly cutting off at [8.9-9.0s]
+2 nisqa group,sysnistl-0000063.wav,unnatural_pause,8.9 seconds.,8.9-end,no,,,,
+2 nisqa group,sysnistl-0000064.wav,unnatural_pause,8.9 seconds.,8.9-end,no,,,,
+2 nisqa group,sysnistl-0000065.wav,unnatural_pause,8.9 seconds.,8.9-end,no,,,,
+2 nisqa group,sysnistl-0000066.wav,unnatural_pause,7.9 seconds.,7.9-end,no,,,,
+2 nisqa group,sysnistl-0000067.wav,unnatural_pause,7.9 seconds.,7.9-end,no,,,,
+2 nisqa group,sysnistl-0000068.wav,unnatural_pause,8.9 seconds.,8.9-end,no,,,,
+2 nisqa group,sysnistl-0000069.wav,unnatural_pause,8.9 seconds.,8.9-end,no,,,,
+2 nisqa group,sysnistl-0000070.wav,unnatural_pause,10.8 seconds.,10.8-end,no,,,,
+2 nisqa group,sysnistl-0000073.wav,unnatural_pause,8.9 seconds.,8.9-end,no,,,,
+2 nisqa group,sysnistl-0000074.wav,unnatural_pause,11.9 seconds.,11.9-end,no,,,,
+2 nisqa group,sysnistl-0000080.wav,unnatural_pause,6.9 seconds.,6.9-end,no,,,,
+2 nisqa group,sysnistl-0000081.wav,unnatural_pause,5.9 seconds.,5.9-end,no,,,,
+2 nisqa group,sysnistl-0000084.wav,unnatural_pause,11.9 secnods.,11.9-end,no,,,,
+2 nisqa group,sysnists-0000115.wav,unnatural_pause,6.9 seconds.,6.9-end,no,,,,
+2 nisqa group,sysnists-0000116.wav,unnatural_pause,7.4 seconds.,7.4-end,no,,,,
+2 nisqa group,sysnists-0000120.wav,unnatural_pause,7.9 seconds.,7.9-end,no,,,,
+2 nisqa group,sysnists-0000121.wav,unnatural_pause,10.9 seconds.,10.9-end,no,,,,
+2 nisqa group,sysnists-0000136.wav,unnatural_pause,11.9 seconds.,11.9-end,yes,accept,,12.0,unnatural pause at [11.9-12s]
+2 nisqa group,sysnists-0000138.wav,unnatural_pause,5.9 seconds.,5.9-end,no,,,,
+2 nisqa group,sysnists-0000146.wav,unnatural_pause,11.9 seconds.,11.9-end,no,,,,
+2 nisqa group,sysnists-0000149.wav,unnatural_pause,10.9 seconds.,10.9-end,no,,,,
+2 nisqa group,sysnists-0001223.wav,unnatural_pause,9.9 seconds.,9.9-end,no,,,,
+2 nisqa group,sysnists-0001226.wav,unnatural_pause,6.9 seconds.,6.9-end,no,,,,
+2 nisqa group,sysnists-0001227.wav,unnatural_pause,9.9 seconds.,9.9-end,no,,,,
+2 nisqa group,sysnists-0001229.wav,unnatural_pause,6.9 seconds.,6.9-end,no,,,,
+2 nisqa group,sysnists-0001252.wav,unnatural_pause,5.9 seconds.,5.9-end,no,,,,
+2 nisqa group,sysnists-0001617.wav,unnatural_pause,8.9 seconds.,8.9-end,no,,,,
+2 nisqa group,sysnists-0001628.wav,unnatural_pause,6.9 seconds.,6.9-end,no,,,,
+2 nisqa group,sysnists-0001642.wav,unnatural_pause,6.9 seconds.,6.9-end,no,,,,
+2 nisqa group,sysnists-0001643.wav,unnatural_pause,10.9 seconds.,10.9-end,no,,,,
+2 nisqa group,sysnists-0001741.wav,unnatural_pause,6.9 seconds.,6.9-end,no,,,,
+2 nisqa group,sysnists-0001744.wav,unnatural_pause,8.9 seconds.,8.9-end,yes,accept,,9.0,Abruptly cutting off at [8.9-9.0s]
+2 nisqa group,sysnists-0001745.wav,unnatural_pause,9.9 seconds.,9.9-end,no,,,,
+2 nisqa group,sysnists-0001749.wav,unnatural_pause,8.9 seconds.,8.9-end,no,,,,
+2 nisqa group,sysnists-0001761.wav,unnatural_pause,5.9 seconds.,5.9-end,no,,,,
+3 point,sys0b2c1-uttd8d5e7d.wav,distortion,There is a very slight pitch distortion with mechanical sound in the audio around 2 second,—,yes,absent,,3.7,"Have speech, no noise, no distortion, no unnatural pause"
+3 point,sys0b2c1-utte3c6fff.wav,distortion,There is a very slight pitch distortion with mechanical sound in the audio around 1.5 seconds,—,yes,absent,,2.6,"Have speech, no noise, no distortion, no unnatural pause"
+3 point,sys0fb9c-utt99b8c12.wav,distortion,"There is odd rhythm distortion in the audio from 1.5s to 2.6s, in 3.2s, and from 5.1s to 5.7s.",candidate 1.5-2.6;5.1-5.7,yes,accept,,6.2,Distortion at [1.5-2.6s; 5.1-5.7s]
+3 point,sys0b3ef-utt16ad908.wav,noise,"There is electric current vvoice noise in the audio in around 0.5 and 2,2 seconds",—,yes,absent,,3.2,"Have speech, no noise, no distortion, no unnatural pause"
+3 point,sys0b3ef-utt2f40b05.wav,noise,There is a electric current sound in the audio around 2.2 seconds,—,yes,absent,,3.3,"Have speech, no noise, no distortion, no unnatural pause"
+3 point,sys29328-utt3a6b10f.wav,noise,There is noise similar to clash sound in the audio at 0.9 and from 2 to 2.7 seconds,candidate 2-2.7,yes,accept,,3.1,Noise at [2.0-2.7s]
+3 point,sys3d8c6-utt991964b.wav,noise,There is crackling sound in the audio in 0.5 and 2.5 seconds,—,yes,absent,,3.3,"Have speech, no noise, no distortion, no unnatural pause"
+3 point,sys41dae-uttbba766d.wav,noise,There is a click in the background in the audio at the 0.8 sceond.,—,yes,absent,,14.0,"Have speech, no noise, no distortion, no unnatural pause"
+3 point,sys732a7-uttb565429.wav,noise,There is background noise similar to the sound of knocking on the door in the audio from 0.1 to 0.3 seconds and the 3.8th second.,candidate 0.1-0.3,yes,accept,,3.8,Noise at [0.1-0.3s]
+3 point,sys77fa4-utt66e8871.wav,noise,There is outdoor traffic sound in the audio from 4 to 12 seconds and in 5.8 second there has a honking of the horn,candidate 4-12,yes,accept,,12.3,Noise at [4.0-12.0s]
+3 point,syse298c-utt03ff97b.wav,noise,There is rustling background noise from 0 to,—,yes,localized,0-end,2.6,Noise at [0.0-2.587s]
+3 point,sysnists-0000335.wav,noise,There is other perple talk sound in the audio from 6-6.5 to 2.5 seconds,candidate 6-6.5,yes,accept,,11.0,Noise at [6-6.5s]
+3 point,sysnists-0001941.wav,noise,"There is a ""click"" sound in the audio at the 6.1 second.",—,yes,localized,6.1-end,6.2,Noise at [6.1-6.229]
+3 point,sys01tts-0000010.wav,unnatural_pause,1.5s,—,yes,localized,1.3-end,1.4,Abruptly cutting off at [1.299-1.397s]
+3 point,sys01tts-0000014.wav,unnatural_pause,4.12s,—,yes,localized,3.8-end,4.0,Abruptly cutting off at [3.758-4.042s]
+3 point,sys01tts-0000016.wav,unnatural_pause,2.4s,—,yes,localized,2.2-end,2.4,Abruptly cutting off at [2.192-2.421s]
+3 point,sys01tts-0000017.wav,unnatural_pause,2.38s,—,yes,localized,2.2-end,2.4,Abruptly cutting off at [2.162-2.400s]
+3 point,sys01tts-0000020.wav,unnatural_pause,2.2s,—,yes,localized,2-end,2.2,Abruptly cutting off at [2.032-2.186s]
+3 point,sys01tts-0000021.wav,unnatural_pause,3.9s,—,yes,unknown,,3.9,unnatural pause at [3.762-3.914s]
+3 point,sys01tts-0000026.wav,unnatural_pause,2.53s,—,yes,localized,2.3-end,2.7,Abruptly cutting off at [2.261-2.677s]
+3 point,sys01tts-0000031.wav,unnatural_pause,10.5s,—,yes,localized,10.6-end,11.0,unnatural pause at [10.585-10.976s]
+3 point,sys0fb9c-utt99b8c12.wav,unnatural_pause,"2.2-2.5s, 2.7-5.1s, 5.5s",candidate 2.2-2.5;2.7-5.1,yes,accept,,6.2,Abruptly cutting off at [2.2-2.5s;2.7-5.1s]
+3 point,sysc84fa-utt7332833.wav,unnatural_pause,0.5-.5s,—,yes,absent,,2.1,"Have speech, no noise, no distortion, no unnatural pause"
+3 point,sysnistl-0000036.wav,unnatural_pause,7.9 seconds.,—,yes,localized,7.7-end,8.0,unnatural pause at [7.724-8.0s]
+3 point,sysnists-0001641.wav,unnatural_pause,6.9 seconds.,—,yes,localized,6.7-end,7.0,unnatural pause at [6.665-7.0s]
+3 point,sysnists-0002036.wav,unnatural_pause,4-4.5s;5-5.7.3s;9.3-9.7s,candidate 4-4.5;5-5.7;9.3-9.7,yes,localized,5.3-7.3,10.0,Abruptly cutting off at [5.345-7.290s]
+4 no time,sys6171c-utt0620dad.wav,distortion,There is pitch distortion with mechanical sound and intermittent electric current quality c,—,yes,absent,,3.6,"Have speech, no noise, no distortion, no unnatural pause"
+4 no time,syseccd8-uttec7cf7d.wav,distortion,There is cracking text,—,yes,absent,,2.1,Noise at [0.0-2.150s]
+4 no time,sysnistl-0000135.wav,distortion,There is slight cracking text,—,yes,absent,,10.0,"Have speech, no noise, no distortion, no unnatural pause"
+4 no time,sysnists-0002162.wav,distortion,There is no people talk,—,yes,localized,0-end,9.0,Distortion at [0.0-9.0s]
+4 no time,sys0b2c1-utt0d3f579.wav,noise,There is ringing bell noise in the audio,—,yes,localized,0-end,3.6,Noise at [0.0-3.612s]
+4 no time,sys0b2c1-utt20926bd.wav,noise,There is rustling noise in the audio,—,yes,localized,0-end,2.5,Noise at [0.0-2.462s]
+4 no time,sys0b2c1-uttce4eba4.wav,noise,There is low and deep trumpet sound noise in the audio,—,yes,localized,0-end,2.5,Noise at [0.0-2.550s]
+4 no time,sys0b2c1-uttdd3d452.wav,noise,There is instrumental voice noise in the audio,—,yes,localized,0-end,2.5,Noise at [0.0-2.550s]
+4 no time,sys0giga-0000852.wav,noise,There is music noise,—,yes,localized,0-end,2.4,Noise at [0.0-2.370s]
+4 no time,sys8094c-utt71ea7c1.wav,noise,there is slight cracking noise,—,yes,absent,,2.4,"Have speech, no noise, no distortion, no unnatural pause"
+4 no time,syse298c-utt808509d.wav,noise,There is background noise,—,yes,absent,,3.5,"Have speech, no noise, no distortion, no unnatural pause"
+5 malformed,sysb25c6-utt50527ea.wav,distortion,There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 1.7-1.7s,candidate 1.7-1.7,yes,absent,,3.0,"Have speech, no noise, no distortion, no unnatural pause"
+5 malformed,sysnists-0002660.wav,distortion,There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 14-11.5s,candidate 14-11.5,yes,localized,0-end,12.0,Distortion at [0.0-12.0s]
+5 malformed,sys0giga-0001854.wav,noise,There is a crackling noise 6-4.2s,candidate 6-4.2,yes,absent,,6.5,"Have speech, no noise, no distortion, no unnatural pause"
+5 malformed,sys00691-utt6a82441.wav,unnatural_pause,02.-0.5s,candidate 2-0.5,yes,absent,,2.4,"Have speech, no noise, no distortion, no unnatural pause"
+5 malformed,sys0giga-0001083.wav,unnatural_pause,1.2-0.7s,candidate 1.2-0.7,yes,absent,,3.0,"Have speech, no noise, no distortion, no unnatural pause"
+5 malformed,sys1aa9c-utt5bd6c5f.wav,unnatural_pause,"11-1.4s, 15.9-16s",candidate 11-1.4;15.9-16,yes,absent,,18.7,Noise at [0.0-10.863s]
+6 wrong column,sys77fa4-utt0c2670d.wav,distortion,the sound is very low,—,yes,absent,,2.9,Noise at [0.0-2.929s]
+6 wrong column,sys77fa4-uttc4d814f.wav,distortion,not distorted but it sounds breathlessly,—,yes,absent,,10.0,Noise at [0.0-9.990s]
+6 wrong column,sysnists-0002867.wav,distortion,Low volume,—,yes,present_unknown_time,,11.0,"Low volume, can not categorize"
+6 wrong column,sys46d3a-utt764e09b.wav,noise,A young woman's high voice with a gentle tone,—,yes,absent,,4.7,Unnatural pause at [4.187-4.679s]
+6 wrong column,sys174d8-uttcd68ec5.wav,unnatural_pause,There is a continuous distortion with mechanical sound in the audio from 0.2s to 3.3s,candidate 0.2-3.3,yes,absent,,3.3,Noise at [0.0-3.3s]
+6 wrong column,sys6b49f-uttcc1cd02.wav,unnatural_pause,A young woman's enchanting voice with a calm tone that sounds convincing.,—,yes,absent,,2.7,"Have speech, no noise, no distortion, no unnatural pause"
+6 wrong column,syse33d4-utta22ce46.wav,unnatural_pause,A man's inhuman voice with a plain tone that sounds unnatural.,—,yes,present_unknown_time,,13.6,"Too many unnatural pauses, can not determined"
+6 wrong column,sysnists-0002162.wav,unnatural_pause,There is no people talk,—,yes,absent,,9.0,Distortion at [0.0-9.0s]
+7 conflict,sys02tts-0000034.wav,distortion,Not distorted,—,yes,absent,,11.1,"noise at [0.0-10.135s], no distortion, no unnatural pause"
+7 conflict,sys0e098-utt3d208f2.wav,distortion,Not distorted,—,yes,absent,,3.5,"Have speech, no noise, no distortion, no unnatural pause"
+7 conflict,sys174d8-uttcd68ec5.wav,distortion,Not noticeable,—,yes,absent,,3.3,"noise at [0.0-3.325s], no distortion, no unnatural pause"
+7 conflict,sysnists-0001243.wav,distortion,Not distorted,—,yes,absent,,9.0,"Have speech, no noise, no distortion, no unnatural pause"
+7 conflict,sys06tts-0000010.wav,distortion,There is pitch distortion with slight mechanical sound 0-6s,0-6,yes,absent,,6.1,"noise at [0.0-6.13s], no distortion"
+7 conflict,sys0giga-0000409.wav,distortion,There is pitch distortion with intermittent electric current quality and echo 0-3.5s,0-3.5,yes,accept,,5.0,have distortion at [0-3.5s]
+7 conflict,sys0giga-0000635.wav,distortion,There is a voice feels distorted with crackling and buzzing texture in the audio from 0.2 to 5 seconds,0.2-5,yes,absent,,5.1,"Have speech, no noise, no distortion, no unnatural pause"
+7 conflict,sys5e858-uttfb198ca.wav,distortion,There is pitch distortion with intermittent electric current quality 0-2.5s,0-2.5,yes,absent,,2.6,"Have speech, no noise, no distortion, no unnatural pause"
+7 conflict,sysf0cac-utt7680547.wav,distortion,there is a pitch distortion with mechanical sound in the audio from 0-8s,0-8,yes,absent,,8.6,"Have noise at [0.0-8.545s], no distortion"
+7 conflict,sysnists-0000164.wav,distortion,There is a voice feels distorted with crackling and buzzing texture in the audio from 0 to 10.9 seoncds.,0-10.9,yes,absent,,11.0,"Have speech, no noise, no distortion, unnatural pause at [10.5-11s]"
+7 conflict,sysnists-0001617.wav,distortion,There is a distortion with abrupt stop in the audio after 8.9 seconds.,8.9-end,yes,absent,,9.0,"Have speech, no noise, no distortion, unnatural pause at [8.9-9.0s]"
+7 conflict,sysnists-0002867.wav,noise,Not noticeable,—,yes,unknown,,11.0,"Low volume, can not determined"
+7 conflict,sys0giga-0001288.wav,noise,not noticeable,—,yes,localized,0.7-end,1.0,Noise at [0.707-1.02s]
+7 conflict,sysnists-0001234.wav,noise,Not noticeable,—,yes,localized,0-end,9.0,Noise at [0.0-9.0s]
+7 conflict,sysnists-0001626.wav,noise,Not noticeable,—,yes,absent,,12.0,No noise
+7 conflict,sys04tts-0000032.wav,noise,Not noticeable,—,yes,absent,,8.2,"No noise, unnatural pause at [3.668-6.122]"
+7 conflict,sys03tts-0000018.wav,noise,There is buzzing noise in the audio from 0-11.9s,0-11.9,yes,localized,0-end,12.0,Noise at [0.0-11.90s]
+7 conflict,sys56eb0-utt211f5f1.wav,noise,There is outdoor background noise in the audio from 0 to 4.3 seconds.,0-4.3,yes,localized,0-end,4.4,Noise at [0.0-4.3s]
+7 conflict,sys6b9da-utt6d66a39.wav,noise,There is outdoor background noise similar to be in a stadium in the audio from 0 to 4.87 seconds.,0-4.87,yes,localized,0-end,4.9,Noise at [0.0-4.87s]
+7 conflict,sysnists-0001244.wav,noise,0 to 6.9 seconds.,0-6.9,yes,localized,0-end,7.0,Noise at [0.0-6.9s]
+7 conflict,sysnists-0001645.wav,noise,There is outdoor background noise in the audio from 0 to 9.9 seconds,0-9.9,yes,localized,0-end,10.0,Noise at [0.0-9.9s]
+7 conflict,sysnists-0001715.wav,noise,There is outdoor background noise in the audio from 0 to 8 seconds.,0-8,yes,localized,0-end,8.0,Noise at [0.0-8.0s]
+7 conflict,sysnists-0001764.wav,noise,There is outdoor background noise in the audio from 0 to 12 seconds.,0-12,yes,localized,0-end,12.0,Noise at [0.0-12.0s]
+7 conflict,sysnists-0001729.wav,unnatural_pause,very smooth,—,yes,localized,0.8-1.5;2.2-2.9;3.2-5.7,6.0,Unnatural pause at [0.848-1.451s;2.230-2.886s;3.244-5.676s]
+7 conflict,sys01tts-0000011.wav,unnatural_pause,Very smooth,—,yes,absent,,5.4,"noise at [0.0-5.421s], no unnatural pause"
+7 conflict,sys8e5c5-uttf09210d.wav,unnatural_pause,Very smooth.,—,yes,present_unknown_time,,2.3,"Noise at [0.0-2.315s], can not determined unnatural pause"
+7 conflict,sys01tts-0000008.wav,unnatural_pause,Very smooth,—,yes,localized,2-end,2.1,Unnatural pause at [2.012-2.122s]
+7 conflict,sys01tts-0000028.wav,unnatural_pause,Very smooth,—,yes,present_unknown_time,,4.8,"Noise at [0.0-4.789s], cannot determined unnatural pause"
+7 conflict,sys01tts-0000042.wav,unnatural_pause,very smooth,—,yes,localized,10-end,10.5,Unnatural pause at [9.98-10.485s]
+7 conflict,sys09tts-0000026.wav,unnatural_pause,very smooth,—,yes,localized,3.2-end,3.4,Unnatural pause at [3.157-3.355s]
+7 conflict,sys0b2c1-utt1e557dd.wav,unnatural_pause,mostly smooth,—,yes,absent,,2.0,No unnatural pause
+7 conflict,sys0e098-utt25d34d7.wav,unnatural_pause,Very smooth,—,yes,absent,,2.6,No unnatural pause
+7 conflict,sys0e098-utt27ada7c.wav,unnatural_pause,Very smooth,—,yes,absent,,2.4,No unnatural pause
+7 conflict,sys0e098-utt2dd1a80.wav,unnatural_pause,Very smooth,—,yes,absent,,5.5,"No unnatural pause, noise at [0.0-5.505s]"
+7 conflict,sys0e098-utt4e3b137.wav,unnatural_pause,Very smooth,—,yes,absent,,2.4,No unnatural pause
+7 conflict,sys174d8-utt2005573.wav,unnatural_pause,Very smooth,—,yes,absent,,3.8,No unnatural pause
+7 conflict,sys174d8-utt2bc6dbf.wav,unnatural_pause,Very smooth,—,yes,absent,,3.9,No unnatural pause
+7 conflict,sys174d8-utt50ce0b4.wav,unnatural_pause,Very smooth,—,yes,absent,,3.2,No unnatural pause
+7 conflict,sys174d8-utt5d62eb0.wav,unnatural_pause,Very smooth,—,yes,absent,,3.2,No unnatural pause
+7 conflict,sys48dd4-uttdebea6d.wav,unnatural_pause,very smooth,—,yes,absent,,5.6,No unnatural pause
+7 conflict,sys541b0-utt0e99daa.wav,unnatural_pause,Very smooth,—,yes,absent,,4.2,No unnatural pause
+7 conflict,sys798be-utt6a181df.wav,unnatural_pause,Very smooth,—,yes,absent,,2.8,"No unnatural pause, noise at [0.0-2.755s]"
+7 conflict,sysnists-0000028.wav,unnatural_pause,Very smooth,—,yes,absent,,8.0,No unnatural pause
+7 conflict,sysnists-0000031.wav,unnatural_pause,Very smooth,—,yes,absent,,8.0,"No unnatural pause, noise at [0.0-8.0s]"
+7 conflict,sysnists-0000287.wav,unnatural_pause,Not noticeable,—,yes,absent,,12.0,"No unnatural pause, noise at [0.0-12.0s]"
+7 conflict,sysnists-0001730.wav,unnatural_pause,very smooth,—,yes,absent,,5.9,No unnatural pause
+7 conflict,sysnists-0001735.wav,unnatural_pause,smoothy,—,yes,absent,,8.0,No unnatural pause
+7 conflict,sys01tts-0000039.wav,unnatural_pause,0.3 to 0.9s,0.3-0.9,yes,absent,,1.1,No unnatural pause
+7 conflict,sys0giga-0000634.wav,unnatural_pause,"2-2.5s, 4.7-5.3s, 6.5-7s",2-2.5;4.7-5.3;6.5-7,yes,accept,,8.3,Unnatural pause at [2-2.5s;4.7-5.3s;6.5-7s]
+7 conflict,sys7ab3c-uttb353f1c.wav,unnatural_pause,0.8-1.2s,0.8-1.2,yes,accept,,2.6,unnatural pause at [0.8-1.2s]
+7 conflict,sys7b162-utt5a8262a.wav,unnatural_pause,1.6-1.9s,1.6-1.9,yes,accept,,2.8,unnatural pause at [1.6-1.9s]
+7 conflict,sys7c5fb-utt1253e85.wav,unnatural_pause,4.6-5.2s,4.6-5.2,yes,absent,,6.2,No unnatural pause
+7 conflict,sysc2927-utt1fb89f6.wav,unnatural_pause,1.2-1.5s,1.2-1.5,yes,accept,,4.2,unnatural pause at [1.2-1.5s]
+7 conflict,sysnistl-0000430.wav,unnatural_pause,3-6.3s,3-6.3,yes,accept,,11.0,unnatural pause at [3-6.3s]
+7 conflict,sysnists-0000164.wav,unnatural_pause,0 to 10.9 seoncds.,0-10.9,yes,absent,,11.0,No unnatural pause
+7 conflict,sysnists-0000171.wav,unnatural_pause,2-2.5s,2-2.5,yes,accept,,10.0,unnatural pause at [2-2.5s]
+7 conflict,sysnists-0000333.wav,unnatural_pause,3.7-4.1s,3.7-4.1,yes,accept,,7.4,unnatural pause at [3.7-4.1s]
+7 conflict,sysnists-0001261.wav,unnatural_pause,8 to 8.5,8-8.5,yes,absent,,9.0,No unnatural pause
+7 conflict,sysnists-0001864.wav,unnatural_pause,0-6.5s,0-6.5,yes,localized,3.7-4.8,7.0,unnatural pause at [3.723-4.773s]
+8 typo,sys08595-utt08f7546.wav,distortion,"There is pitch distortion with mechanical sound and intermittent electric current quality in the audio from 2 to 4,7 to 8 seconds.",2-4;7-8,no,,,,
+8 typo,sys16354-utt9aa8226.wav,distortion,"There is pitch distortion with mechanical sound in the audio from 0,2 to 2 seconds.",0.2-2,no,,,,
+8 typo,sys3d8c6-utt52d010e.wav,distortion,"There is pitch distortion with mechanical sound in the audio from 0.2 to 0,6 seconds",0.2-0.6,no,,,,
+8 typo,sys3d8c6-utt6bf88e3.wav,distortion,"There is pitch distortion with mechanical sound in the audio from 0.1 to 2,7 seconds",0.1-2.7,no,,,,
+8 typo,sys3d8c6-utt78693e7.wav,distortion,"There is pitch distortion with mechanical sound in the audio from 0.4 to1,0 seconds",0.4-1,no,,,,
+8 typo,sys44ea4-utt057a944.wav,distortion,There is pitch distortion with mechanical sound and intermittent electric current quality from 1.5--2.5 seconds,1.5-2.5,no,,,,
+8 typo,sys5e858-utt0420c93.wav,distortion,There is a continuous distortion with electric current quality in the audio from o to 2.3 seconds.,0-2.3,no,,,,
+8 typo,sys64f06-uttd961287.wav,distortion,There is pitch distortion with mechanical sound from 0.5 t 2.4 seconds,0.5-2.4,no,,,,
+8 typo,sys9dd03-uttf55d154.wav,distortion,There is a voice feels distorted with crackling and buzzing texture in the audio from 0.3 t 2.7 seconds.,0.3-2.7,no,,,,
+8 typo,sysnists-0000784.wav,distortion,There is a pitch distortion with mechanical sound from 2.5 to8.5 seconds,2.5-8.5,no,,,,
+8 typo,sysnists-0000804.wav,distortion,There is a pitch distortion with intermittent current electric quality from 0 to7.6 seconds,0-7.6,no,,,,
+8 typo,sysnists-0000958.wav,distortion,there is mechanical sound distortion at 0-9 .5s,0-9.5,no,,,,
+8 typo,sysnists-0002393.wav,distortion,There is a pitch distortion with mechanical sound from 0 to9.5 seconds,0-9.5,no,,,,
+8 typo,sys0giga-0000490.wav,noise,There is a sound of music in the audio from 0 to2.6 seconds,0-2.6,no,,,,
+8 typo,sys0giga-0000494.wav,noise,There is a sound of beat in the audio from 0 to4.5 seconds,0-4.5,no,,,,
+8 typo,sys0giga-0000938.wav,noise,There is a sound of music in the audio from 0 to1.2 seconds,0-1.2,no,,,,
+8 typo,sys1aa9c-utt165ece7.wav,noise,"There is a background noise consisting of chicken sounds and gun shots from 0s to1.9s, from 4.4s to 6.3s, and from 8.2s to 8.5s.",0-1.9;4.4-6.3;8.2-8.5,no,,,,
+8 typo,sys64e2f-utte68dd24.wav,noise,There is music noise in the audio from o to 6.5 seconds,0-6.5,no,,,,
+8 typo,sys64f06-uttd9cb6e1.wav,noise,There is the sound of beating in the audio from 0 to 3 .5 seconds,0-3.5,no,,,,
+8 typo,sysa22c0-uttd0fa2cc.wav,noise,There is outdoor background noise in the audio from o to 1.6 seconds.,0-1.6,no,,,,
+8 typo,sysa360c-utt3040b31.wav,noise,There is background noise similar to typing keyboard in the audio from 0 2.8 seconds.,0-2.8,no,,,,
+8 typo,sysnistl-0000051.wav,noise,There is indoor background noise in the audio from o to 11.9 seconds.,0-11.9,no,,,,
+8 typo,sysnistl-0000068.wav,noise,"There is outdoor background noise in the audio from 0 to 8,9 seconds.",0-8.9,no,,,,
+8 typo,sysnistl-0000070.wav,noise,There is outdoor background noise in the audio from 0 10.8 seconds.,0-10.8,no,,,,
+8 typo,sysnists-0000118.wav,noise,There is outdoor background noise in the audio from 0to 6.3 seconds.,0-6.3,no,,,,
+8 typo,sysnists-0000125.wav,noise,There is background noise similar to the breathing sound in the audio from 0 11.9 seconds.,0-11.9,no,,,,
+8 typo,sysnists-0000371.wav,noise,There is a cracking noise 0.5-2..5s,0.5-2.5,no,,,,
+8 typo,sysnists-0000801.wav,noise,There is a sound of hit in the audio from 0 to9.5 seconds,0-9.5,no,,,,
+8 typo,sys64f06-uttd961287.wav,unnatural_pause,05-2.4s,0.5-2.4,no,,,,
+8 typo,sys9dd03-uttf55d154.wav,unnatural_pause,0.3 t 2.7 seconds,0.3-2.7,no,,,,
+8 typo,sysnists-0000129.wav,unnatural_pause,1to 6.9 seconds.,1-6.9,no,,,,
+8 typo,sysnists-0000177.wav,unnatural_pause,"0,5-5.5s",0.5-5.5,no,,,,
+8 typo,sysnists-0001912.wav,unnatural_pause,"0-6,5s",0-6.5,no,,,,

@@ -35,6 +35,7 @@ from sqa.postprocess import BASELINE_POSTPROCESS, predict_fault_type, serialize_
 CSV_PATH = ROOT / "data" / "qualispeech" / "train.csv"
 CACHE_DIR = ROOT / "data" / "qualispeech" / "wavlm_cache"
 REVIEWED_JSON_PATH = ROOT / "label_studio" / "reviewed_labels_for_kien.json"
+LABEL_V2_PATH = ROOT / "data" / "qualispeech" / "label_v2" / "parsed_labels.jsonl"
 OUT_DIR = ROOT / "outputs" / "fault_head"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -105,8 +106,36 @@ def parse_text_intervals(text: str, fault_type: str) -> list[list[float]]:
     return intervals
 
 
-def build_annotation_lookup(df: pd.DataFrame, reviewed_path: Path | None = None) -> dict[str, dict]:
+def build_annotation_lookup(
+    df: pd.DataFrame,
+    reviewed_path: Path | None = None,
+    label_v2_path: Path | None = None,
+) -> dict[str, dict]:
     lookup = {}
+
+    # If Labels v2 (parsed_labels.jsonl) is available, use it as the primary gold-standard!
+    if label_v2_path is not None and label_v2_path.exists():
+        print(f"Loading official Labels v2 from: {label_v2_path}")
+        with open(label_v2_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                rec = json.loads(line)
+                fid = str(rec["file_id"]).strip()
+                ft = str(rec["fault"]).strip()
+                st = str(rec["status"]).strip()
+                if fid not in lookup:
+                    lookup[fid] = {k: [] for k in FAULT_TYPES}
+                # USABLE_STATUSES: no_fault, parsed, normalized, audited, rule_confirmed
+                if st in ("no_fault", "parsed", "normalized", "audited", "rule_confirmed"):
+                    ivs = []
+                    for s, e in rec.get("intervals", []):
+                        if s is not None and e is not None and float(s) < float(e):
+                            ivs.append([round(float(s), 2), round(float(e), 2)])
+                    lookup[fid][ft] = ivs
+        print(f"Successfully loaded {len(lookup)} files with Labels v2.")
+        return lookup
+
     col_map = {
         "noise": "Noise Description",
         "distortion": "Distortion description",
@@ -339,7 +368,7 @@ def main():
     df["group"] = df["sample_id"].map(get_group)
     df["source"] = df["group"].map(get_source)
 
-    annotation_lookup = build_annotation_lookup(df, REVIEWED_JSON_PATH)
+    annotation_lookup = build_annotation_lookup(df, REVIEWED_JSON_PATH, label_v2_path=LABEL_V2_PATH)
     train_df, val_df = make_source_balanced_split(df)
 
     train_dataset = CachedFaultDataset(train_df, CACHE_DIR, annotation_lookup)
