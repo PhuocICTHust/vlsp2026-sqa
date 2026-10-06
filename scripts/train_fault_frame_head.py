@@ -349,6 +349,10 @@ def main():
     parser.add_argument("--hidden-dim", type=int, default=256)
     parser.add_argument("--n-blocks", type=int, default=2)
     parser.add_argument("--kernel-size", type=int, default=5)
+    parser.add_argument("--train-csv", type=str, default=None, help="Path to train CSV")
+    parser.add_argument("--val-csv", type=str, default=None, help="Path to val CSV")
+    parser.add_argument("--test-csv", type=str, default=None, help="Path to test CSV")
+    parser.add_argument("--label-path", type=str, default=None, help="Path to parsed_labels.jsonl")
     args = parser.parse_args()
 
     set_seed(SEED)
@@ -362,17 +366,45 @@ def main():
     print(f"LR:          {args.lr}")
     print(f"Cache dir:   {CACHE_DIR}")
 
-    df = pd.read_csv(CSV_PATH)
-    df["sample_id"] = df["id"].astype(str).str.strip().str.replace(r"\.wav$", "", regex=True)
-    df["target"] = pd.to_numeric(df["Overall quality"], errors="raise").astype(float)
-    df["group"] = df["sample_id"].map(get_group)
-    df["source"] = df["group"].map(get_source)
+    label_path = Path(args.label_path) if args.label_path else None
+    if label_path is None:
+        full_label_path = ROOT / "data" / "qualispeech" / "label_v2_full" / "parsed_labels.jsonl"
+        label_path = full_label_path if full_label_path.exists() else LABEL_V2_PATH
 
-    annotation_lookup = build_annotation_lookup(df, REVIEWED_JSON_PATH, label_v2_path=LABEL_V2_PATH)
-    train_df, val_df = make_source_balanced_split(df)
+    test_loader = None
+    if args.train_csv and args.val_csv:
+        train_df = pd.read_csv(args.train_csv)
+        val_df = pd.read_csv(args.val_csv)
+        print(f"Using explicit splits:\n  Train: {args.train_csv}\n  Val:   {args.val_csv}")
 
-    train_dataset = CachedFaultDataset(train_df, CACHE_DIR, annotation_lookup)
-    val_dataset = CachedFaultDataset(val_df, CACHE_DIR, annotation_lookup)
+        annotation_lookup = build_annotation_lookup(pd.concat([train_df, val_df]), REVIEWED_JSON_PATH, label_v2_path=label_path)
+        train_dataset = CachedFaultDataset(train_df, CACHE_DIR, annotation_lookup)
+        val_dataset = CachedFaultDataset(val_df, CACHE_DIR, annotation_lookup)
+
+        if args.test_csv:
+            test_df = pd.read_csv(args.test_csv)
+            print(f"  Test:  {args.test_csv}")
+            test_dataset = CachedFaultDataset(test_df, CACHE_DIR, annotation_lookup)
+            test_loader = DataLoader(
+                test_dataset,
+                batch_size=args.batch_size,
+                shuffle=False,
+                num_workers=0,
+                pin_memory=(DEVICE.type == "cuda"),
+                collate_fn=fault_collate_fn,
+            )
+    else:
+        df = pd.read_csv(CSV_PATH)
+        df["sample_id"] = df["id"].astype(str).str.strip().str.replace(r"\.wav$", "", regex=True)
+        df["target"] = pd.to_numeric(df["Overall quality"], errors="raise").astype(float)
+        df["group"] = df["sample_id"].map(get_group)
+        df["source"] = df["group"].map(get_source)
+
+        annotation_lookup = build_annotation_lookup(df, REVIEWED_JSON_PATH, label_v2_path=label_path)
+        train_df, val_df = make_source_balanced_split(df)
+
+        train_dataset = CachedFaultDataset(train_df, CACHE_DIR, annotation_lookup)
+        val_dataset = CachedFaultDataset(val_df, CACHE_DIR, annotation_lookup)
 
     train_loader = DataLoader(
         train_dataset,
@@ -392,6 +424,8 @@ def main():
     )
 
     print(f"Train samples: {len(train_dataset)} | Val samples: {len(val_dataset)}")
+    if test_loader is not None:
+        print(f"Test samples:  {len(test_loader.dataset)}")
 
     fault_head = FaultFrameHead(
         input_dim=1024,
@@ -490,6 +524,17 @@ def main():
     print(f"Best Epoch:       {best_epoch}")
     print(f"Best Fault Score: {best_score:.4f}")
     print(f"Saved Checkpoint: {BEST_CHECKPOINT}")
+
+    if test_loader is not None:
+        print("\n" + "=" * 70)
+        print("FINAL BLIND TEST EVALUATION (Fault Frame Head on test.csv)")
+        print("=" * 70)
+        ckpt = torch.load(BEST_CHECKPOINT, map_location=DEVICE)
+        fault_head.load_state_dict(ckpt["fault_head_state_dict"])
+        test_metrics = evaluate_fault_head(fault_head, test_loader, DEVICE)
+        print(f"Test F1_macro:   {test_metrics['f1_macro']:.4f}")
+        print(f"Test IoU_macro:  {test_metrics['iou_macro']:.4f}")
+        print(f"Test Composite:  {test_metrics['composite_fault_score']:.4f}")
 
 
 if __name__ == "__main__":
