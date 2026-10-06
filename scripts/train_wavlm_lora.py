@@ -458,8 +458,14 @@ def evaluate(backbone, quality_head, loader):
     predictions = []
     targets = []
 
+    use_amp = USE_AMP and DEVICE.type == "cuda"
     for batch in loader:
-        pred = forward_batch(backbone, quality_head, batch)
+        with torch.autocast(
+            device_type="cuda",
+            dtype=torch.float16,
+            enabled=use_amp,
+        ):
+            pred = forward_batch(backbone, quality_head, batch)
         target = batch["target"].to(DEVICE)
 
         predictions.append(pred.float().cpu())
