@@ -608,8 +608,11 @@ def main():
     parser.add_argument("--lr-lora", type=float, default=LR_LORA, help="Learning rate for LoRA weights")
     parser.add_argument("--lr-head", type=float, default=LR_HEAD, help="Learning rate for Quality Head")
     parser.add_argument("--seed", type=int, default=SEED, help="Random seed")
-    parser.add_argument("--csv-path", type=str, default=str(CSV_PATH), help="Path to CSV dataset")
-    parser.add_argument("--val-ratio", type=float, default=VAL_RATIO, help="Validation ratio")
+    parser.add_argument("--csv-path", type=str, default=str(CSV_PATH), help="Path to CSV dataset (if auto-splitting)")
+    parser.add_argument("--val-ratio", type=float, default=VAL_RATIO, help="Validation ratio (if auto-splitting)")
+    parser.add_argument("--train-csv", type=str, default=None, help="Path to explicit train CSV (e.g. data/qualispeech/train.csv)")
+    parser.add_argument("--val-csv", type=str, default=None, help="Path to explicit val CSV (e.g. data/qualispeech/val.csv)")
+    parser.add_argument("--test-csv", type=str, default=None, help="Path to explicit test CSV (e.g. data/qualispeech/test.csv)")
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -639,33 +642,55 @@ def main():
     # ------------------------------------------------------------------
     # DATA PREPARATION (SOURCE-BALANCED)
     # ------------------------------------------------------------------
-    csv_path = Path(args.csv_path)
-    df = pd.read_csv(csv_path)
-    df["sample_id"] = (
-        df["id"].astype(str).str.strip().str.replace(r"\.wav$", "", regex=True)
-    )
-    df["target"] = pd.to_numeric(df["Overall quality"], errors="raise").astype(float)
-    df["group"] = df["sample_id"].map(get_group)
-    df["source"] = df["group"].map(get_source)
+    test_loader = None
+    if args.train_csv and args.val_csv:
+        train_path = Path(args.train_csv)
+        val_path = Path(args.val_csv)
+        print(f"Using explicit splits:\n  Train: {train_path}\n  Val:   {val_path}")
 
-    train_df, val_df = make_source_balanced_split(df, val_ratio=args.val_ratio)
-    if csv_path.name == "train.csv" and (len(train_df) != 8446 or len(val_df) != 2112):
-        print(f"Warning: split count is {len(train_df)} / {len(val_df)} (expected 8446 / 2112).")
+        train_dataset = QualiSpeechDataset(csv_path=train_path, wav_dir=WAV_DIR)
+        val_dataset = QualiSpeechDataset(csv_path=val_path, wav_dir=WAV_DIR)
+
+        if args.test_csv:
+            test_path = Path(args.test_csv)
+            print(f"  Test:  {test_path}")
+            test_dataset = QualiSpeechDataset(csv_path=test_path, wav_dir=WAV_DIR)
+            test_loader = DataLoader(
+                test_dataset,
+                batch_size=args.batch_size,
+                shuffle=False,
+                num_workers=args.num_workers,
+                pin_memory=(DEVICE.type == "cuda"),
+                collate_fn=qualispeech_collate,
+            )
     else:
-        print(f"Dataset: {csv_path.name} | Total: {len(df)} | Train: {len(train_df)} | Val: {len(val_df)}")
+        csv_path = Path(args.csv_path)
+        df = pd.read_csv(csv_path)
+        df["sample_id"] = (
+            df["id"].astype(str).str.strip().str.replace(r"\.wav$", "", regex=True)
+        )
+        df["target"] = pd.to_numeric(df["Overall quality"], errors="raise").astype(float)
+        df["group"] = df["sample_id"].map(get_group)
+        df["source"] = df["group"].map(get_source)
 
-    full_dataset = QualiSpeechDataset(
-        csv_path=csv_path,
-        wav_dir=WAV_DIR,
-        indices=list(range(len(df))),
-    )
+        train_df, val_df = make_source_balanced_split(df, val_ratio=args.val_ratio)
+        if csv_path.name == "train.csv" and (len(train_df) != 8446 or len(val_df) != 2112):
+            print(f"Warning: split count is {len(train_df)} / {len(val_df)} (expected 8446 / 2112).")
+        else:
+            print(f"Dataset: {csv_path.name} | Total: {len(df)} | Train: {len(train_df)} | Val: {len(val_df)}")
 
-    id_to_idx = {str(fid): i for i, fid in enumerate(full_dataset.df["id"].astype(str))}
-    train_indices = [id_to_idx[x] for x in train_df["id"].astype(str)]
-    val_indices = [id_to_idx[x] for x in val_df["id"].astype(str)]
+        full_dataset = QualiSpeechDataset(
+            csv_path=csv_path,
+            wav_dir=WAV_DIR,
+            indices=list(range(len(df))),
+        )
 
-    train_dataset = Subset(full_dataset, train_indices)
-    val_dataset = Subset(full_dataset, val_indices)
+        id_to_idx = {str(fid): i for i, fid in enumerate(full_dataset.df["id"].astype(str))}
+        train_indices = [id_to_idx[x] for x in train_df["id"].astype(str)]
+        val_indices = [id_to_idx[x] for x in val_df["id"].astype(str)]
+
+        train_dataset = Subset(full_dataset, train_indices)
+        val_dataset = Subset(full_dataset, val_indices)
 
     train_loader = DataLoader(
         train_dataset,
@@ -689,6 +714,8 @@ def main():
     print("SPLIT SUMMARY")
     print(f"Train samples: {len(train_dataset)}, Batches: {len(train_loader)}")
     print(f"Val samples:   {len(val_dataset)}, Batches: {len(val_loader)}")
+    if test_loader is not None:
+        print(f"Test samples:  {len(test_loader.dataset)}, Batches: {len(test_loader)}")
 
     # ------------------------------------------------------------------
     # LOAD WAVLM & ATTACH MANUAL LoRA
@@ -841,6 +868,18 @@ def main():
     print(f"VAL MAE: {final['mae']:.8f}")
     print(f"VAL CCC: {final['ccc']:.8f}")
     print(f"VAL PCC: {final['pcc']:.8f}")
+
+    if test_loader is not None:
+        print()
+        print("=" * 70)
+        print("FINAL BLIND TEST EVALUATION (QualiSpeech test.csv)")
+        print("=" * 70)
+        test_final = evaluate(backbone, quality_head, test_loader)
+        print(f"TEST MSE: {test_final['mse']:.8f}")
+        print(f"TEST MAE: {test_final['mae']:.8f}")
+        print(f"TEST CCC: {test_final['ccc']:.8f}")
+        print(f"TEST PCC: {test_final['pcc']:.8f}")
+
     print()
     print("Training finished successfully.")
 
