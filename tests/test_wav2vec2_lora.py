@@ -14,6 +14,9 @@ from peft import LoraConfig, get_peft_model, get_peft_model_state_dict, set_peft
 from transformers import Wav2Vec2Config, Wav2Vec2Model
 
 from sqa.model import QualityHead
+from sqa.peft_compat import disable_incompatible_torchao
+
+disable_incompatible_torchao()
 
 NUM_LAYERS = 2
 
@@ -45,7 +48,8 @@ def wrap(model):
         lora_dropout=0.0,
         target_modules=["q_proj", "v_proj"],
         bias="none",
-        task_type="FEATURE_EXTRACTION",
+        # No task_type: the generic PeftModel passes input_values through unchanged.
+        # (task_type="FEATURE_EXTRACTION" renames the first argument to input_ids, which wav2vec2/HuBERT reject.)
     )
     return get_peft_model(model, cfg)
 
@@ -66,7 +70,7 @@ def test_lora_targets_and_gradients(norm):
     backbone.train()
     wav = torch.randn(1, 4000)
     mask = torch.ones_like(wav, dtype=torch.long)
-    hidden = backbone(input_values=wav, attention_mask=mask).last_hidden_state
+    hidden = backbone(wav, attention_mask=mask).last_hidden_state
     pred = head(hidden)
     loss = (pred - 3.0).pow(2).mean()
     loss.backward()
@@ -88,14 +92,14 @@ def test_lora_is_identity_at_init_and_roundtrip():
     backbone = wrap(base)
     backbone.eval()
     with torch.no_grad():
-        out = backbone(input_values=wav).last_hidden_state
+        out = backbone(wav).last_hidden_state
     assert torch.allclose(ref, out, atol=1e-6)  # B = 0 -> no change
 
     with torch.no_grad():
         for n, p in backbone.named_parameters():
             if "lora_B" in n:
                 p.normal_()
-        changed = backbone(input_values=wav).last_hidden_state
+        changed = backbone(wav).last_hidden_state
     assert not torch.allclose(ref, changed)
 
     state = {k: v.clone() for k, v in get_peft_model_state_dict(backbone).items()}
@@ -103,5 +107,5 @@ def test_lora_is_identity_at_init_and_roundtrip():
     fresh.eval()
     set_peft_model_state_dict(fresh, state)
     with torch.no_grad():
-        restored = fresh(input_values=wav).last_hidden_state
+        restored = fresh(wav).last_hidden_state
     assert torch.allclose(changed, restored, atol=1e-6)
