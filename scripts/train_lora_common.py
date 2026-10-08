@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
-from transformers import HubertModel, WavLMModel
+from transformers import AutoFeatureExtractor, HubertModel, Wav2Vec2Model, WavLMModel
 from peft import LoraConfig, get_peft_model, get_peft_model_state_dict, set_peft_model_state_dict
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +22,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from sqa.dataset import QualiSpeechDataset, qualispeech_collate
+from sqa.hub import resolve_model
 from sqa.model import (
     QualityHead,
     quality_loss,
@@ -52,6 +53,21 @@ LORA_R = 8
 LORA_ALPHA = 16
 LORA_DROPOUT = 0.05
 TARGET_MODULES = ["q_proj", "v_proj"]
+
+# Backbones whose attention calls q_proj(x)/v_proj(x) as nn.Linear modules,
+# so PEFT LoRA can wrap them directly. WavLM is NOT in this set: its attention
+# reads q_proj.weight inside F.multi_head_attention_forward, so it needs the
+# manual LoRA patch below.
+PEFT_BACKBONES = {"hubert", "wav2vec2"}
+
+DEFAULT_MODEL_NAMES = {
+    "wavlm": "microsoft/wavlm-large",
+    "hubert": "facebook/hubert-base-ls960",
+    # Same size (95M, 12 layers, 768-d) and pre-training data (LibriSpeech 960 h)
+    # as hubert-base-ls960 -> clean backbone comparison. For a multilingual
+    # backbone that has seen Vietnamese, pass --model-name facebook/wav2vec2-xls-r-300m.
+    "wav2vec2": "facebook/wav2vec2-base",
+}
 
 USE_AMP = True
 AMP_DTYPE = torch.float16
@@ -274,7 +290,28 @@ def frame_valid_mask(backbone, attention_mask: torch.Tensor) -> torch.Tensor:
     return frame_idx < frame_lengths.unsqueeze(1)
 
 
-def evaluate(backbone, quality_head, loader, device, amp_enabled):
+def prepare_inputs(wav: torch.Tensor, attention_mask: torch.Tensor, input_cfg: dict):
+    """Apply the backbone's expected input preprocessing.
+
+    - do_normalize: per-utterance zero-mean / unit-variance over the valid
+      (non-padded) samples, padding kept at 0 (same as HF
+      Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm).
+    - pass_mask: models with feat_extract_norm == "group" (e.g. wav2vec2-base)
+      were pre-trained without an attention mask; HF recommends zero-padding
+      and NOT passing the mask. The frame mask for pooling is still used.
+    """
+    if input_cfg.get("do_normalize", False):
+        m = attention_mask.to(wav.dtype)
+        n = m.sum(dim=1, keepdim=True).clamp(min=1.0)
+        mean = (wav * m).sum(dim=1, keepdim=True) / n
+        var = (((wav - mean) * m) ** 2).sum(dim=1, keepdim=True) / n
+        wav = (wav - mean) / torch.sqrt(var + 1e-7) * m
+    mask_arg = attention_mask.long() if input_cfg.get("pass_mask", True) else None
+    return wav, mask_arg
+
+
+def evaluate(backbone, quality_head, loader, device, amp_enabled, input_cfg=None):
+    input_cfg = input_cfg or {}
     backbone.eval()
     quality_head.eval()
 
@@ -292,7 +329,8 @@ def evaluate(backbone, quality_head, loader, device, amp_enabled):
                 dtype=AMP_DTYPE,
                 enabled=amp_enabled,
             ):
-                out = backbone(wav, attention_mask=attention_mask)
+                model_wav, model_mask = prepare_inputs(wav, attention_mask, input_cfg)
+                out = backbone(model_wav, attention_mask=model_mask)
                 hidden = out.last_hidden_state
                 valid_mask = frame_valid_mask(backbone, attention_mask)
                 pred = quality_head(hidden, valid_mask)
@@ -316,18 +354,47 @@ def evaluate(backbone, quality_head, loader, device, amp_enabled):
     }
 
 
-def build_backbone(backbone_name: str, device: torch.device):
+def _wav2vec2_input_cfg(model_name: str, config) -> dict:
+    """Read the checkpoint's own preprocessing; fall back to config if offline."""
+    try:
+        fe = AutoFeatureExtractor.from_pretrained(resolve_model(model_name))
+        return {
+            "do_normalize": bool(getattr(fe, "do_normalize", True)),
+            "pass_mask": bool(getattr(fe, "return_attention_mask", False)),
+        }
+    except Exception as exc:  # no preprocessor_config.json / offline
+        print(f"[warn] feature extractor not loaded ({exc}); using config fallback")
+        return {
+            "do_normalize": True,
+            "pass_mask": getattr(config, "feat_extract_norm", "group") == "layer",
+        }
+
+
+def build_backbone(
+    backbone_name: str,
+    device: torch.device,
+    model_name: str | None = None,
+    no_spec_augment: bool = False,
+):
+    model_name = model_name or DEFAULT_MODEL_NAMES[backbone_name]
+    # Kept identical to the previous WavLM/HuBERT runs (raw waveform + mask).
+    input_cfg = {"do_normalize": False, "pass_mask": True}
+
     if backbone_name == "wavlm":
-        model_name = "microsoft/wavlm-large"
-        backbone = WavLMModel.from_pretrained(model_name).to(device)
-        expected_hidden = 1024
+        backbone = WavLMModel.from_pretrained(resolve_model(model_name)).to(device)
         attach_wavlm_manual_lora(backbone)
-    elif backbone_name == "hubert":
-        model_name = "facebook/hubert-base-ls960"
-        backbone = HubertModel.from_pretrained(model_name).to(device)
-        expected_hidden = 768
+    elif backbone_name in PEFT_BACKBONES:
+        model_cls = HubertModel if backbone_name == "hubert" else Wav2Vec2Model
+        backbone = model_cls.from_pretrained(resolve_model(model_name)).to(device)
         if hasattr(backbone.config, "layerdrop"):
             backbone.config.layerdrop = 0.0
+        if backbone_name == "wav2vec2":
+            input_cfg = _wav2vec2_input_cfg(model_name, backbone.config)
+        if no_spec_augment:
+            # SpecAugment-style time/feature masking is active in train() mode
+            # whenever mask_time_prob > 0 (0.05 in most checkpoints).
+            backbone.config.mask_time_prob = 0.0
+            backbone.config.mask_feature_prob = 0.0
 
         lora_config = LoraConfig(
             r=LORA_R,
@@ -342,13 +409,25 @@ def build_backbone(backbone_name: str, device: torch.device):
         raise ValueError(backbone_name)
 
     if hasattr(backbone, "enable_input_require_grads"):
-        backbone.enable_input_require_grads()
+        try:
+            backbone.enable_input_require_grads()
+        except NotImplementedError:
+            # Older transformers: speech models have no input embeddings.
+            # Not needed here: the conv feature encoder sets requires_grad on its
+            # input in train mode, and we use non-reentrant checkpointing.
+            pass
 
     if hasattr(backbone, "gradient_checkpointing_enable"):
-        backbone.gradient_checkpointing_enable()
+        try:
+            backbone.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs={"use_reentrant": False}
+            )
+        except TypeError:
+            backbone.gradient_checkpointing_enable()
 
+    hidden_size = int(get_base_model_for_mask(backbone).config.hidden_size)
     backbone.train()
-    return backbone, model_name, expected_hidden
+    return backbone, model_name, hidden_size, input_cfg
 
 
 def count_params(module):
@@ -358,7 +437,7 @@ def count_params(module):
 
 
 def save_checkpoint(path, backbone, quality_head, optimizer, scaler, epoch, metrics, args):
-    if args.backbone == "hubert":
+    if args.backbone in PEFT_BACKBONES:
         lora_state = get_peft_model_state_dict(backbone)
     else:
         lora_state = {
@@ -377,6 +456,8 @@ def save_checkpoint(path, backbone, quality_head, optimizer, scaler, epoch, metr
         "backbone": args.backbone,
         "model_name": args.model_name,
         "hidden_size": args.hidden_size,
+        "input_cfg": args.input_cfg,
+        "no_spec_augment": args.no_spec_augment,
         "lora_r": LORA_R,
         "lora_alpha": LORA_ALPHA,
         "seed": SEED,
@@ -386,7 +467,7 @@ def save_checkpoint(path, backbone, quality_head, optimizer, scaler, epoch, metr
 
 def load_checkpoint(path, backbone, quality_head, device, backbone_name):
     ckpt = torch.load(path, map_location=device)
-    if backbone_name == "hubert":
+    if backbone_name in PEFT_BACKBONES:
         set_peft_model_state_dict(backbone, ckpt["lora_state_dict"])
     else:
         backbone_params = dict(backbone.named_parameters())
@@ -401,8 +482,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--backbone",
-        choices=["wavlm", "hubert"],
+        choices=["wavlm", "hubert", "wav2vec2"],
         required=True,
+    )
+    parser.add_argument(
+        "--model-name",
+        type=str,
+        default=None,
+        help="HF checkpoint id; default per backbone (see DEFAULT_MODEL_NAMES).",
+    )
+    parser.add_argument(
+        "--no-spec-augment",
+        action="store_true",
+        help="Disable HF time/feature masking during training (HuBERT/wav2vec2).",
     )
     parser.add_argument(
         "--batch-size",
@@ -486,9 +578,15 @@ def main():
         collate_fn=qualispeech_collate,
     )
 
-    backbone, model_name, hidden_size = build_backbone(args.backbone, device)
+    backbone, model_name, hidden_size, input_cfg = build_backbone(
+        args.backbone,
+        device,
+        model_name=args.model_name,
+        no_spec_augment=args.no_spec_augment,
+    )
     args.model_name = model_name
     args.hidden_size = hidden_size
+    args.input_cfg = input_cfg
 
     quality_head = QualityHead(hidden_size=hidden_size, dropout=DROPOUT_HEAD).to(device)
 
@@ -499,6 +597,8 @@ def main():
     print("MODEL AUDIT")
     print(f"Model name:       {model_name}")
     print(f"Hidden size:      {hidden_size}")
+    print(f"Input cfg:        {input_cfg}")
+    print(f"SpecAugment off:  {args.no_spec_augment}")
     print(f"LoRA trainable:   {lora_trainable:,}")
     print(f"Head trainable:   {head_trainable:,}")
     print(f"TOTAL TRAINABLE:  {lora_trainable + head_trainable:,}")
@@ -522,7 +622,7 @@ def main():
 
     print()
     print("INITIAL VALIDATION")
-    initial = evaluate(backbone, quality_head, val_loader, device, amp_enabled)
+    initial = evaluate(backbone, quality_head, val_loader, device, amp_enabled, input_cfg)
     print(
         f"Init | MSE={initial['mse']:.6f} | "
         f"MAE={initial['mae']:.6f} | "
@@ -561,7 +661,8 @@ def main():
                 dtype=AMP_DTYPE,
                 enabled=amp_enabled,
             ):
-                out = backbone(wav, attention_mask=attention_mask)
+                model_wav, model_mask = prepare_inputs(wav, attention_mask, input_cfg)
+                out = backbone(model_wav, attention_mask=model_mask)
                 hidden = out.last_hidden_state
                 valid_mask = frame_valid_mask(backbone, attention_mask)
                 pred = quality_head(hidden, valid_mask)
@@ -607,7 +708,7 @@ def main():
                 accum_targets = []
 
         train_loss = running_loss / max(num_updates, 1)
-        val_metrics = evaluate(backbone, quality_head, val_loader, device, amp_enabled)
+        val_metrics = evaluate(backbone, quality_head, val_loader, device, amp_enabled, input_cfg)
 
         row = {
             "epoch": epoch,
@@ -647,7 +748,7 @@ def main():
     print("=" * 70)
 
     load_checkpoint(best_path, backbone, quality_head, device, args.backbone)
-    final = evaluate(backbone, quality_head, val_loader, device, amp_enabled)
+    final = evaluate(backbone, quality_head, val_loader, device, amp_enabled, input_cfg)
 
     print(f"Best epoch:   {best_epoch}")
     print(f"Best val PCC: {final['pcc']:.8f}")
