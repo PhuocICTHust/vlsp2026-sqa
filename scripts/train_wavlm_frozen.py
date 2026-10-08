@@ -359,6 +359,14 @@ def main():
     print(f"VAL CCC: {final_val['ccc']:.6f}")
     print(f"VAL PCC: {final_val['pcc']:.6f}")
 
+    val_pred_df = pd.DataFrame({
+        "id": [f"{fid}.wav" for fid in final_val["file_ids"]],
+        "ground_truth": final_val["targets"],
+        "prediction": final_val["predictions"],
+    })
+    val_pred_df.to_csv(out_dir / "val_predictions.csv", index=False)
+    print(f"Saved val predictions to: {out_dir / 'val_predictions.csv'}")
+
     # Final Blind Test evaluation
     if test_loader is not None:
         final_test = evaluate(model, test_loader, device)
