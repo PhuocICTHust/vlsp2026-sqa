@@ -223,6 +223,7 @@ def main():
     parser.add_argument("--val-csv", type=str, default=None, help="Path to val CSV (e.g. data/qualispeech/val.csv)")
     parser.add_argument("--test-csv", type=str, default=None, help="Path to test CSV (e.g. data/qualispeech/test.csv)")
     parser.add_argument("--label-path", type=str, default=None, help="Path to parsed_labels.jsonl")
+    parser.add_argument("--out-config", type=str, default=None, help="Path to save calibrated JSON config")
     args = parser.parse_args()
 
     checkpoint_path = Path(args.checkpoint)
@@ -376,11 +377,12 @@ def main():
         "baseline_metrics": {"f1_macro": base_f1, "iou_macro": base_iou, "composite": base_composite},
         "calibrated_metrics": {"f1_macro": cal_f1, "iou_macro": cal_iou, "composite": cal_composite},
     }
-    OUT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUT_CONFIG_PATH, "w", encoding="utf-8") as f:
+    out_config_path = Path(args.out_config) if args.out_config else OUT_CONFIG_PATH
+    out_config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_config_path, "w", encoding="utf-8") as f:
         json.dump(saved_payload, f, indent=2)
 
-    print(f"\nSaved calibrated configuration to: {OUT_CONFIG_PATH}")
+    print(f"\nSaved calibrated configuration to: {out_config_path}")
     print("=" * 70)
 
 
