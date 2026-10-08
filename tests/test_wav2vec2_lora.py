@@ -66,7 +66,7 @@ def test_lora_targets_and_gradients(norm):
     backbone.train()
     wav = torch.randn(1, 4000)
     mask = torch.ones_like(wav, dtype=torch.long)
-    hidden = backbone(wav, attention_mask=mask).last_hidden_state
+    hidden = backbone(input_values=wav, attention_mask=mask).last_hidden_state
     pred = head(hidden)
     loss = (pred - 3.0).pow(2).mean()
     loss.backward()
@@ -88,14 +88,14 @@ def test_lora_is_identity_at_init_and_roundtrip():
     backbone = wrap(base)
     backbone.eval()
     with torch.no_grad():
-        out = backbone(wav).last_hidden_state
+        out = backbone(input_values=wav).last_hidden_state
     assert torch.allclose(ref, out, atol=1e-6)  # B = 0 -> no change
 
     with torch.no_grad():
         for n, p in backbone.named_parameters():
             if "lora_B" in n:
                 p.normal_()
-        changed = backbone(wav).last_hidden_state
+        changed = backbone(input_values=wav).last_hidden_state
     assert not torch.allclose(ref, changed)
 
     state = {k: v.clone() for k, v in get_peft_model_state_dict(backbone).items()}
@@ -103,5 +103,5 @@ def test_lora_is_identity_at_init_and_roundtrip():
     fresh.eval()
     set_peft_model_state_dict(fresh, state)
     with torch.no_grad():
-        restored = fresh(wav).last_hidden_state
+        restored = fresh(input_values=wav).last_hidden_state
     assert torch.allclose(changed, restored, atol=1e-6)

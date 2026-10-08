@@ -36,5 +36,9 @@ sample_audio/
 /document/
 /label_studio/ls_data/
 
+# Outputs & archives
+outputs/
+*.zip
+
 # OS
 .DS_Store

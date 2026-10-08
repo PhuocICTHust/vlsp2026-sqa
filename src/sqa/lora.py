@@ -76,7 +76,7 @@ def manual_lora_attention_forward(
         self.out_proj.bias,
         self.training,
         key_padding_mask,
-        need_weights=True,
+        need_weights=False,
         attn_mask=gated_position_bias,
         use_separate_proj_weight=True,
         q_proj_weight=q_weight,
@@ -192,6 +192,12 @@ def apply_lora_to_backbone(
     """
     High-level helper to attach, patch, and optionally load LoRA weights.
     """
+    if lora_dict is not None:
+        for k, v in lora_dict.items():
+            if "lora_A" in k:
+                r = v.shape[0]
+                alpha = float(r * 2.0)
+                break
     attach_manual_lora(backbone, r=r, alpha=alpha)
     patch_wavlm_attention(backbone)
     if lora_dict is not None:

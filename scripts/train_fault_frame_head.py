@@ -29,7 +29,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 from sqa.evaluator import FAULT_TYPES, compute_f1_macro, compute_frame_iou_macro
 from sqa.frame_grid import EVALUATOR_GRID, MODEL_GRID, intervals_to_model_frame_targets
-from sqa.frame_head import FaultFrameHead
+from sqa.frame_head import FaultFrameHead, topk_presence
 from sqa.postprocess import BASELINE_POSTPROCESS, predict_fault_type, serialize_intervals
 
 CSV_PATH = ROOT / "data" / "qualispeech" / "train.csv"
@@ -289,6 +289,56 @@ def compute_focal_bce_loss(
     return (focal * mask).sum() / mask.sum().clamp(min=1)
 
 
+def compute_soft_iou_loss(
+    probs: torch.Tensor,
+    targets: torch.Tensor,
+    valid_mask: torch.Tensor,
+    eps: float = 1e-6,
+) -> torch.Tensor:
+    """Soft IoU loss: 1 - mean(Intersection / Union) on valid frames across batch."""
+    mask = valid_mask.unsqueeze(-1).expand_as(probs)
+    p = probs * mask
+    t = targets * mask
+    intersection = (p * t).sum(dim=(0, 1))
+    union = p.sum(dim=(0, 1)) + t.sum(dim=(0, 1)) - intersection
+    iou = (intersection + eps) / (union + eps)
+    return 1.0 - iou.mean()
+
+
+def compute_clip_presence_loss(
+    probs: torch.Tensor,
+    targets: torch.Tensor,
+    valid_mask: torch.Tensor,
+) -> torch.Tensor:
+    """Clip-level presence loss: penalize predicting faults on clean clips."""
+    pred_presence = topk_presence(probs, valid_mask)
+    mask = valid_mask.unsqueeze(-1).expand_as(targets)
+    gt_presence = (targets * mask).amax(dim=1).clamp(0.0, 1.0)
+    eps = 1e-7
+    pred_presence = pred_presence.clamp(eps, 1.0 - eps)
+    return F.binary_cross_entropy(pred_presence, gt_presence)
+
+
+def compute_hybrid_fault_loss(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    valid_mask: torch.Tensor,
+    w_focal: float = 1.0,
+    w_iou: float = 0.5,
+    w_presence: float = 0.2,
+) -> tuple[torch.Tensor, dict[str, float]]:
+    probs = torch.sigmoid(logits)
+    loss_focal = compute_focal_bce_loss(logits, targets, valid_mask)
+    loss_iou = compute_soft_iou_loss(probs, targets, valid_mask) if w_iou > 0.0 else torch.zeros_like(loss_focal)
+    loss_presence = compute_clip_presence_loss(probs, targets, valid_mask) if w_presence > 0.0 else torch.zeros_like(loss_focal)
+    total_loss = w_focal * loss_focal + w_iou * loss_iou + w_presence * loss_presence
+    return total_loss, {
+        "focal": loss_focal.item(),
+        "iou": loss_iou.item(),
+        "presence": loss_presence.item(),
+    }
+
+
 @torch.no_grad()
 def evaluate_fault_head(
     head: FaultFrameHead,
@@ -349,22 +399,44 @@ def main():
     parser.add_argument("--hidden-dim", type=int, default=256)
     parser.add_argument("--n-blocks", type=int, default=2)
     parser.add_argument("--kernel-size", type=int, default=5)
+    parser.add_argument("--dilations", nargs="+", type=int, default=None, help="Dilations list, e.g. 1 2 4 8")
+    parser.add_argument("--temporal-type", type=str, choices=["none", "bilstm", "bigru"], default="none", help="Temporal context layer: bilstm or bigru")
+    parser.add_argument("--temporal-dim", type=int, default=128, help="Temporal layer hidden dimension")
+    parser.add_argument("--use-bi-gru", action="store_true", help="Add bidirectional GRU temporal context layer")
+    parser.add_argument("--gru-dim", type=int, default=128, help="BiGRU hidden dimension (legacy flag)")
+    parser.add_argument("--w-focal", type=float, default=1.0, help="Weight for Focal BCE loss")
+    parser.add_argument("--w-iou", type=float, default=0.5, help="Weight for Soft-IoU loss")
+    parser.add_argument("--w-presence", type=float, default=0.2, help="Weight for Clip-level presence loss")
     parser.add_argument("--train-csv", type=str, default=None, help="Path to train CSV")
     parser.add_argument("--val-csv", type=str, default=None, help="Path to val CSV")
     parser.add_argument("--test-csv", type=str, default=None, help="Path to test CSV")
     parser.add_argument("--label-path", type=str, default=None, help="Path to parsed_labels.jsonl")
+    parser.add_argument("--out-dir", type=str, default="outputs/fault_head", help="Output directory")
+    parser.add_argument("--checkpoint-path", type=str, default=None, help="Checkpoint path")
     args = parser.parse_args()
 
     set_seed(SEED)
 
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    best_checkpoint = Path(args.checkpoint_path) if args.checkpoint_path else out_dir / "best_fault_frame_head.pt"
+
+    dilations = tuple(args.dilations) if args.dilations else (1,) * args.n_blocks
+    temporal_type = args.temporal_type
+    if temporal_type == "none" and args.use_bi_gru:
+        temporal_type = "bigru"
+
     print("=" * 70)
     print("TRAINING FAULT FRAME HEAD ON WAVLM CACHED FEATURES")
     print("=" * 70)
-    print(f"Device:      {DEVICE}")
-    print(f"Batch size:  {args.batch_size}")
-    print(f"Epochs:      {args.epochs}")
-    print(f"LR:          {args.lr}")
-    print(f"Cache dir:   {CACHE_DIR}")
+    print(f"Device:          {DEVICE}")
+    print(f"Batch size:      {args.batch_size}")
+    print(f"Epochs:          {args.epochs}")
+    print(f"LR:              {args.lr}")
+    print(f"Dilations:       {dilations}")
+    print(f"Temporal Model:  {temporal_type.upper()} (dim={args.temporal_dim})")
+    print(f"Loss weights:    focal={args.w_focal}, iou={args.w_iou}, presence={args.w_presence}")
+    print(f"Cache dir:       {CACHE_DIR}")
 
     label_path = Path(args.label_path) if args.label_path else None
     if label_path is None:
@@ -427,17 +499,22 @@ def main():
     if test_loader is not None:
         print(f"Test samples:  {len(test_loader.dataset)}")
 
-    fault_head = FaultFrameHead(
-        input_dim=1024,
-        n_faults=len(FAULT_TYPES),
-        hidden_dim=args.hidden_dim,
-        n_blocks=args.n_blocks,
-        kernel_size=args.kernel_size,
-        dropout=0.1,
-    ).to(DEVICE)
+    fault_head_kwargs = {
+        "input_dim": 1024,
+        "n_faults": len(FAULT_TYPES),
+        "hidden_dim": args.hidden_dim,
+        "n_blocks": len(dilations),
+        "kernel_size": args.kernel_size,
+        "dilations": dilations,
+        "dropout": 0.1,
+        "temporal_type": temporal_type,
+        "temporal_dim": args.temporal_dim,
+    }
+    fault_head = FaultFrameHead(**fault_head_kwargs).to(DEVICE)
 
     trainable_params = sum(p.numel() for p in fault_head.parameters() if p.requires_grad)
     print(f"FaultFrameHead trainable parameters: {trainable_params:,}")
+    print(f"Receptive Field: {fault_head.receptive_field_frames} frames (~{fault_head.receptive_field_frames * 0.02:.2f}s)")
 
     optimizer = torch.optim.AdamW(fault_head.parameters(), lr=args.lr, weight_decay=WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-5)
@@ -470,7 +547,14 @@ def main():
 
             optimizer.zero_grad(set_to_none=True)
             logits = fault_head(hidden, valid_mask)
-            loss = compute_focal_bce_loss(logits, targets, valid_mask)
+            loss, _ = compute_hybrid_fault_loss(
+                logits,
+                targets,
+                valid_mask,
+                w_focal=args.w_focal,
+                w_iou=args.w_iou,
+                w_presence=args.w_presence,
+            )
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(fault_head.parameters(), max_norm=1.0)
@@ -503,33 +587,27 @@ def main():
                 {
                     "epoch": epoch,
                     "fault_head_state_dict": fault_head.state_dict(),
-                    "fault_head_kwargs": {
-                        "input_dim": 1024,
-                        "n_faults": len(FAULT_TYPES),
-                        "hidden_dim": args.hidden_dim,
-                        "n_blocks": args.n_blocks,
-                        "kernel_size": args.kernel_size,
-                    },
+                    "fault_head_kwargs": fault_head_kwargs,
                     "metrics": val_metrics,
                 },
-                BEST_CHECKPOINT,
+                best_checkpoint,
             )
             print(f"  -> NEW BEST CHECKPOINT (epoch={epoch}, Fault Score={best_score:.4f})")
 
-        pd.DataFrame(history).to_csv(OUT_DIR / "training_history.csv", index=False)
+        pd.DataFrame(history).to_csv(out_dir / "training_history.csv", index=False)
 
     print("\n" + "=" * 70)
     print("TRAINING FINISHED")
     print("=" * 70)
     print(f"Best Epoch:       {best_epoch}")
     print(f"Best Fault Score: {best_score:.4f}")
-    print(f"Saved Checkpoint: {BEST_CHECKPOINT}")
+    print(f"Saved Checkpoint: {best_checkpoint}")
 
     if test_loader is not None:
         print("\n" + "=" * 70)
         print("FINAL BLIND TEST EVALUATION (Fault Frame Head on test.csv)")
         print("=" * 70)
-        ckpt = torch.load(BEST_CHECKPOINT, map_location=DEVICE)
+        ckpt = torch.load(best_checkpoint, map_location=DEVICE)
         fault_head.load_state_dict(ckpt["fault_head_state_dict"])
         test_metrics = evaluate_fault_head(fault_head, test_loader, DEVICE)
         print(f"Test F1_macro:   {test_metrics['f1_macro']:.4f}")

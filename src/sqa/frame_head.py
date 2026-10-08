@@ -69,6 +69,10 @@ class FaultFrameHead(nn.Module):
         dropout: float = 0.1,
         num_input_layers: int = 1,
         prior_prob: float = 0.05,
+        use_bi_gru: bool = False,
+        gru_hidden_dim: int = 128,
+        temporal_type: str = "none",
+        temporal_dim: int = 128,
     ):
         super().__init__()
         if kernel_size % 2 != 1:
@@ -88,6 +92,36 @@ class FaultFrameHead(nn.Module):
         self.in_norm = nn.LayerNorm(input_dim)
         self.in_proj = nn.Linear(input_dim, hidden_dim)
         self.blocks = nn.ModuleList(_ConvBlock(hidden_dim, kernel_size, d, dropout) for d in dilations)
+
+        # Support temporal_type: "bilstm" | "bigru" | "none"
+        if temporal_type == "none" and use_bi_gru:
+            temporal_type = "bigru"
+            temporal_dim = gru_hidden_dim
+
+        self.temporal_type = temporal_type
+        self.temporal_dim = temporal_dim
+
+        if temporal_type == "bilstm":
+            self.temporal = nn.LSTM(
+                hidden_dim,
+                temporal_dim,
+                batch_first=True,
+                bidirectional=True,
+            )
+            self.temporal_proj = nn.Linear(temporal_dim * 2, hidden_dim)
+            self.temporal_norm = nn.LayerNorm(hidden_dim)
+        elif temporal_type == "bigru":
+            self.temporal = nn.GRU(
+                hidden_dim,
+                temporal_dim,
+                batch_first=True,
+                bidirectional=True,
+            )
+            self.temporal_proj = nn.Linear(temporal_dim * 2, hidden_dim)
+            self.temporal_norm = nn.LayerNorm(hidden_dim)
+        else:
+            self.temporal = None
+
         self.out_norm = nn.LayerNorm(hidden_dim)
         self.out_proj = nn.Linear(hidden_dim, n_faults)
 
@@ -114,6 +148,11 @@ class FaultFrameHead(nn.Module):
         x = self.in_proj(self.in_norm(h)) * mask_f
         for block in self.blocks:
             x = block(x, mask_f)
+
+        if self.temporal is not None:
+            rnn_out, _ = self.temporal(x)
+            x = self.temporal_norm((x + self.temporal_proj(rnn_out)) * mask_f) * mask_f
+
         logits = self.out_proj(self.out_norm(x))
         return logits.masked_fill(~mask.unsqueeze(-1), PAD_LOGIT)
 

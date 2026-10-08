@@ -169,25 +169,31 @@ def grid_search_fault(
         min_duration_list = [0.0, 0.05, 0.10, 0.15]
         presence_opts = [(False, 0.5), (True, 0.4), (True, 0.5)]
 
+    hysteresis_opts = [(False, 0.20), (True, 0.20), (True, 0.25)]
+
     best_cfg = BASELINE_POSTPROCESS
     best_comp = base_comp
     best_metrics = {"f1": base_f1, "iou": base_iou, "score": base_comp}
 
     total_candidates = (
-        len(tau_frame_list) * len(merge_gap_list) * len(min_duration_list) * len(presence_opts)
+        len(tau_frame_list) * len(merge_gap_list) * len(min_duration_list) * len(presence_opts) * len(hysteresis_opts)
     )
     print(f"  Searching {total_candidates} candidate configurations...")
 
     count = 0
-    for tau, gap, m_dur, (use_p, tau_p) in itertools.product(
-        tau_frame_list, merge_gap_list, min_duration_list, presence_opts
+    for tau, gap, m_dur, (use_p, tau_p), (use_h, tau_low) in itertools.product(
+        tau_frame_list, merge_gap_list, min_duration_list, presence_opts, hysteresis_opts
     ):
+        if use_h and tau_low >= tau:
+            continue
         cfg = PostProcessConfig(
             tau_frame=tau,
             merge_gap=gap,
             min_duration=m_dur,
             use_presence_gate=use_p,
             tau_presence=tau_p,
+            use_hysteresis=use_h,
+            tau_low=tau_low,
         )
         f1, iou, comp = evaluate_config_for_fault(fault_idx, fault_type, cfg, all_probs, all_gt)
         count += 1
@@ -205,28 +211,62 @@ def grid_search_fault(
     print(
         f"  Optimal parameters: tau_frame={best_cfg.tau_frame}, "
         f"merge_gap={best_cfg.merge_gap}s, min_duration={best_cfg.min_duration}s, "
-        f"presence_gate={best_cfg.use_presence_gate} (tau_p={best_cfg.tau_presence})"
+        f"presence_gate={best_cfg.use_presence_gate} (tau_p={best_cfg.tau_presence}), "
+        f"hysteresis={best_cfg.use_hysteresis} (tau_low={best_cfg.tau_low})"
     )
     return best_cfg, best_metrics
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Calibrate FaultFrameHead post-processing thresholds.")
+    parser.add_argument("--checkpoint", type=str, default=str(CHECKPOINT_PATH), help="Path to trained FaultFrameHead checkpoint")
+    parser.add_argument("--val-csv", type=str, default=None, help="Path to val CSV (e.g. data/qualispeech/val.csv)")
+    parser.add_argument("--test-csv", type=str, default=None, help="Path to test CSV (e.g. data/qualispeech/test.csv)")
+    parser.add_argument("--label-path", type=str, default=None, help="Path to parsed_labels.jsonl")
+    args = parser.parse_args()
+
+    checkpoint_path = Path(args.checkpoint)
     print("=" * 70)
     print("FAULT HEAD THRESHOLD & POST-PROCESSING CALIBRATION")
     print("=" * 70)
-    print(f"Checkpoint: {CHECKPOINT_PATH}")
+    print(f"Checkpoint: {checkpoint_path}")
     print(f"Device:     {DEVICE}")
 
-    # Load validation dataset
-    df = pd.read_csv(CSV_PATH)
-    df["sample_id"] = df["id"].astype(str).str.strip().str.replace(r"\.wav$", "", regex=True)
-    df["target"] = pd.to_numeric(df["Overall quality"], errors="raise").astype(float)
-    df["group"] = df["sample_id"].map(get_group)
-    df["source"] = df["group"].map(get_source)
+    label_path = Path(args.label_path) if args.label_path else None
+    if label_path is None:
+        full_label_path = ROOT / "data" / "qualispeech" / "label_v2_full" / "parsed_labels.jsonl"
+        label_path = full_label_path if full_label_path.exists() else LABEL_V2_PATH
 
-    annotation_lookup = build_annotation_lookup(df, REVIEWED_JSON_PATH, label_v2_path=LABEL_V2_PATH)
-    _, val_df = make_source_balanced_split(df)
-    val_dataset = CachedFaultDataset(val_df, CACHE_DIR, annotation_lookup)
+    test_loader = None
+    if args.val_csv:
+        val_df = pd.read_csv(args.val_csv)
+        print(f"Using explicit val CSV: {args.val_csv} ({len(val_df)} samples)")
+        annotation_lookup = build_annotation_lookup(val_df, REVIEWED_JSON_PATH, label_v2_path=label_path)
+        val_dataset = CachedFaultDataset(val_df, CACHE_DIR, annotation_lookup)
+
+        if args.test_csv:
+            test_df = pd.read_csv(args.test_csv)
+            print(f"Using explicit test CSV: {args.test_csv} ({len(test_df)} samples)")
+            test_annotation_lookup = build_annotation_lookup(test_df, REVIEWED_JSON_PATH, label_v2_path=label_path)
+            test_dataset = CachedFaultDataset(test_df, CACHE_DIR, test_annotation_lookup)
+            test_loader = DataLoader(
+                test_dataset,
+                batch_size=32,
+                shuffle=False,
+                num_workers=0,
+                collate_fn=fault_collate_fn,
+            )
+    else:
+        df = pd.read_csv(CSV_PATH)
+        df["sample_id"] = df["id"].astype(str).str.strip().str.replace(r"\.wav$", "", regex=True)
+        df["target"] = pd.to_numeric(df["Overall quality"], errors="raise").astype(float)
+        df["group"] = df["sample_id"].map(get_group)
+        df["source"] = df["group"].map(get_source)
+
+        annotation_lookup = build_annotation_lookup(df, REVIEWED_JSON_PATH, label_v2_path=label_path)
+        _, val_df = make_source_balanced_split(df)
+        val_dataset = CachedFaultDataset(val_df, CACHE_DIR, annotation_lookup)
+
     val_loader = DataLoader(
         val_dataset,
         batch_size=32,
@@ -236,7 +276,7 @@ def main():
     )
 
     # Load model
-    payload = torch.load(CHECKPOINT_PATH, map_location="cpu")
+    payload = torch.load(checkpoint_path, map_location="cpu")
     kwargs = payload.get("fault_head_kwargs", {})
     model = FaultFrameHead(**kwargs).to(DEVICE)
     model.load_state_dict(payload["fault_head_state_dict"])
@@ -307,7 +347,30 @@ def main():
     print(f"Calibrated F1 macro:  {cal_f1:.4f}  (+{cal_f1 - base_f1:+.4f})")
     print(f"Calibrated IoU macro: {cal_iou:.4f}  (+{cal_iou - base_iou:+.4f})")
 
-    # Save to JSON
+    if test_loader is not None:
+        print("\n" + "=" * 70)
+        print("BLIND TEST EVALUATION WITH CALIBRATED CONFIG (test.csv)")
+        print("=" * 70)
+        test_probs, _, test_gt, _ = collect_predictions(model, test_loader, DEVICE)
+        test_entries = []
+        test_gt_entries = []
+        for idx, probs in enumerate(test_probs):
+            duration = len(probs) * MODEL_GRID.frame_hop_sec + MODEL_GRID.offset_sec
+            clip_faults = {}
+            for f_idx, ft in enumerate(FAULT_TYPES):
+                cfg = calibrated_configs[ft]
+                ivs, _, _, _ = predict_fault_type(probs[:, f_idx], MODEL_GRID, duration, cfg)
+                clip_faults[ft] = serialize_intervals(ivs, round_digits=2, duration=duration)
+            test_entries.append({"id": f"test_clip_{idx}", "faults": clip_faults, "_duration": duration})
+            test_gt_entries.append({"id": f"test_clip_{idx}", "faults": test_gt[idx], "_duration": duration})
+
+        t_durs = [e["_duration"] for e in test_entries]
+        t_f1, _ = compute_f1_macro(test_entries, test_gt_entries, fault_types=FAULT_TYPES)
+        t_iou, _ = compute_frame_iou_macro(test_entries, test_gt_entries, durations=t_durs, grid=EVALUATOR_GRID, fault_types=FAULT_TYPES)
+        t_comp = 0.5 * t_f1 + 0.5 * t_iou
+        print(f"Test Calibrated Composite: {t_comp:.4f}")
+        print(f"Test Calibrated F1 macro:  {t_f1:.4f}")
+        print(f"Test Calibrated IoU macro: {t_iou:.4f}")
     saved_payload = {
         "calibrated_configs": {ft: cfg.to_dict() for ft, cfg in calibrated_configs.items()},
         "baseline_metrics": {"f1_macro": base_f1, "iou_macro": base_iou, "composite": base_composite},

@@ -36,11 +36,23 @@ def main():
         default="outputs/fault_head/best_fault_frame_head.pt",
         help="Path to trained FaultFrameHead checkpoint.",
     )
+    if (ROOT / "checkpoints/wavlm_manual_lora_trainval_best.pt").exists():
+        default_quality = "checkpoints/wavlm_manual_lora_trainval_best.pt"
+    elif (ROOT / "checkpoints/wavlm_manual_lora_full_best.pt").exists():
+        default_quality = "checkpoints/wavlm_manual_lora_full_best.pt"
+    else:
+        default_quality = "outputs/cached_full/best_quality_head.pt"
     parser.add_argument(
         "--quality-ckpt",
         type=str,
-        default="outputs/cached_full/best_quality_head.pt",
+        default=default_quality,
         help="Path to trained QualityHead or full model checkpoint.",
+    )
+    parser.add_argument(
+        "--postprocess-config",
+        type=str,
+        default="outputs/fault_head/calibrated_postprocess_config.json" if (ROOT / "outputs/fault_head/calibrated_postprocess_config.json").exists() else None,
+        help="Path to calibrated_postprocess_config.json.",
     )
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
@@ -68,10 +80,27 @@ def main():
     else:
         print(f"Warning: Fault checkpoint {fault_ckpt_path} not found. Using untrained FaultFrameHead.")
 
+    # Detect QualityHead type from checkpoint
+    q_type = "standard"
+    q_kwargs = None
+    q_payload = None
+    if quality_ckpt_path.exists():
+        q_payload = torch.load(quality_ckpt_path, map_location="cpu")
+        if isinstance(q_payload, dict):
+            if "quality_head_type" in q_payload:
+                q_type = q_payload["quality_head_type"]
+                q_kwargs = q_payload.get("quality_head_kwargs", {})
+            elif "quality_head_state_dict" in q_payload and any(k.startswith("bilstm.") for k in q_payload["quality_head_state_dict"]):
+                q_type = "utmos_nisqa"
+                q_kwargs = q_payload.get("quality_head_kwargs", {})
+
+    print(f"Initializing SQAModel with QualityHead type: {q_type}")
     model = SQAModel(
         model_name="microsoft/wavlm-large",
         freeze_backbone=True,
         fault_head_kwargs=fault_kwargs,
+        quality_head_kwargs=q_kwargs,
+        quality_head_type=q_type,
     ).to(args.device)
 
     # Load weights
@@ -79,15 +108,17 @@ def main():
         model.fault_head.load_state_dict(fault_payload["fault_head_state_dict"])
         print("-> FaultFrameHead weights loaded successfully.")
 
-    if quality_ckpt_path.exists():
-        q_payload = torch.load(quality_ckpt_path, map_location="cpu")
+    if q_payload is not None:
         if "quality_head_state_dict" in q_payload:
             model.quality_head.load_state_dict(q_payload["quality_head_state_dict"])
-            print("-> QualityHead weights loaded from full/LoRA checkpoint.")
+            print(f"-> QualityHead ({q_type}) weights loaded from full/LoRA checkpoint.")
             if "lora_state_dict" in q_payload:
                 from sqa.lora import apply_lora_to_backbone
                 apply_lora_to_backbone(model.backbone.backbone, q_payload["lora_state_dict"])
                 print("-> WavLM LoRA weights attached and loaded into backbone.")
+            if q_payload.get("normalize_wav", False):
+                model.normalize_wav = True
+                print("-> Audio waveform normalization enabled for model.")
         elif isinstance(q_payload, dict):
             # Direct QualityHead state_dict (from cached_full)
             model.quality_head.load_state_dict(q_payload)
@@ -97,13 +128,30 @@ def main():
 
     model.eval()
 
+    # Postprocess configuration
+    from sqa.postprocess import PostProcessConfig
+    post_cfg = BASELINE_POSTPROCESS
+    if args.postprocess_config and (ROOT / args.postprocess_config).exists():
+        cfg_file = ROOT / args.postprocess_config
+        with open(cfg_file, "r", encoding="utf-8") as f:
+            raw_cfg = json.load(f)
+        if "calibrated_configs" in raw_cfg:
+            post_cfg = {
+                k: PostProcessConfig(**{param: val for param, val in v.items() if param != "is_baseline"})
+                for k, v in raw_cfg["calibrated_configs"].items()
+            }
+            print(f"Loaded calibrated postprocessing configs from: {cfg_file.name}")
+        else:
+            post_cfg = PostProcessConfig(**{param: val for param, val in raw_cfg.items() if param != "is_baseline"})
+            print(f"Loaded single postprocessing config from: {cfg_file.name}")
+
     # Run inference
     print(f"\nRunning inference on folder: {audio_dir} ...")
     entries, duration_lookup = run_on_folder(
         audio_dir=audio_dir,
         model=model,
         grid=MODEL_GRID,
-        postprocess_config=BASELINE_POSTPROCESS,
+        postprocess_config=post_cfg,
         device=args.device,
     )
     print(f"Generated predictions for {len(entries)} files.")

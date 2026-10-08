@@ -22,15 +22,22 @@ while true; do
         echo "======================================================================"
         
         python scripts/train_wavlm_lora.py \
-            --train-csv data/qualispeech/train.csv \
-            --val-csv data/qualispeech/val.csv \
-            --test-csv data/qualispeech/test.csv \
-            --batch-size 8 \
-            --grad-accum 2 \
+            --train-csv data/qualispeech/train_val.csv \
+            --val-csv data/qualispeech/test.csv \
+            --checkpoint-path checkpoints/wavlm_manual_lora_trainval_best.pt \
+            --batch-size 4 \
+            --grad-accum 4 \
             --num-workers 4 \
             --lora-r 16 \
             --lora-alpha 32 \
-            --epochs 10
+            --epochs 8 \
+            --w-mse 0.4 \
+            --w-ccc 0.3 \
+            --w-pcc 0.3 \
+            --w-rank 0.1 \
+            --rank-margin 0.1 \
+            --normalize-wav \
+            --save-preds
             
         echo "======================================================================"
         echo "TRAINING COMPLETE!"

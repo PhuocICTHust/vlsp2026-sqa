@@ -24,6 +24,7 @@ class PostProcessConfig:
     use_peak_window: bool = False
     tau_peak_min: float = 0.3
     peak_half_window_sec: float = 0.15
+    use_hysteresis: bool = False
 
     def __post_init__(self):
         for name in ("tau_frame", "tau_presence", "tau_low", "tau_peak_min"):
@@ -46,6 +47,7 @@ class PostProcessConfig:
                 or self.use_relax_threshold
                 or self.use_relax_min_duration
                 or self.use_peak_window
+                or self.use_hysteresis
             )
         )
 
@@ -120,6 +122,31 @@ def presence_from_frames(
     return float(np.sort(probs)[-k:].mean())
 
 
+def hysteresis_threshold(probs: np.ndarray, tau_high: float, tau_low: float) -> np.ndarray:
+    """
+    Two-threshold hysteresis:
+    Keep connected segments above tau_low if and only if they contain at least one point > tau_high.
+    """
+    above_low = probs > tau_low
+    above_high = probs > tau_high
+    out = np.zeros_like(above_low, dtype=bool)
+    n = len(probs)
+    i = 0
+    while i < n:
+        if above_low[i]:
+            start = i
+            has_high = False
+            while i < n and above_low[i]:
+                if above_high[i]:
+                    has_high = True
+                i += 1
+            if has_high:
+                out[start:i] = True
+        else:
+            i += 1
+    return out
+
+
 def frame_probs_to_intervals(
     probs: np.ndarray,
     grid: ModelFrameGrid,
@@ -127,11 +154,15 @@ def frame_probs_to_intervals(
     threshold: float = 0.5,
     min_duration: float = 0.0,
     merge_gap: float = 0.0,
+    tau_low: float | None = None,
 ) -> list[list[float]]:
     if duration is None:
         duration = len(probs) * grid.frame_hop_sec + grid.offset_sec
 
-    binary = probs > threshold
+    if tau_low is not None and 0.0 <= tau_low < threshold:
+        binary = hysteresis_threshold(probs, tau_high=threshold, tau_low=tau_low)
+    else:
+        binary = probs > threshold
     runs: list[tuple[int, int]] = []
     start = None
     for i, v in enumerate(binary):
@@ -185,10 +216,18 @@ def predict_fault_type(
     if config.use_relax_min_duration:
         attempts.append(("relax_min_dur", relaxed_tau, 0.0))
 
+    hyst_tau_low = config.tau_low if config.use_hysteresis else None
+
     for name, threshold, min_duration in attempts:
         intervals = _clip(
             frame_probs_to_intervals(
-                probs, grid, duration, threshold=threshold, min_duration=min_duration, merge_gap=config.merge_gap
+                probs,
+                grid,
+                duration,
+                threshold=threshold,
+                min_duration=min_duration,
+                merge_gap=config.merge_gap,
+                tau_low=hyst_tau_low,
             )
         )
         if intervals:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import random
 import sys
@@ -32,9 +33,12 @@ if str(SRC) not in sys.path:
 from src.sqa.dataset import QualiSpeechDataset, qualispeech_collate
 from src.sqa.model import (
     QualityHead,
+    UtmosNisqaQualityHead,
     quality_loss,
     concordance_correlation_coefficient,
     pearson_correlation,
+    pairwise_ranking_loss,
+    normalize_waveform,
 )
 
 
@@ -59,11 +63,11 @@ SEED = 42
 
 MODEL_NAME = "microsoft/wavlm-large"
 
-# RTX 3060 6 GB: 1 sample per GPU forward, accumulated over 4 steps (4.7 GB VRAM peak).
+# Default: 1 sample per forward, accumulated over 16 steps (effective batch size 16)
 BATCH_SIZE = 1
-GRAD_ACCUM_STEPS = 4
+GRAD_ACCUM_STEPS = 16
 
-EPOCHS = 10
+EPOCHS = 8
 VAL_RATIO = 0.20
 
 LORA_R = 8
@@ -75,6 +79,14 @@ LR_HEAD = 5e-4
 WEIGHT_DECAY = 1e-4
 
 DROPOUT_HEAD = 0.10
+
+# Loss weights
+W_MSE = 0.4
+W_CCC = 0.3
+W_PCC = 0.3
+W_RANK = 0.1
+RANK_MARGIN = 0.1
+NORMALIZE_WAV = True
 
 PRINT_EVERY = 50
 EVAL_EVERY = 1
@@ -345,7 +357,7 @@ def manual_lora_attention_forward(
         self.out_proj.bias,
         self.training,
         key_padding_mask,
-        need_weights=True,
+        need_weights=False,
         attn_mask=gated_position_bias,
         use_separate_proj_weight=True,
         q_proj_weight=q_weight,
@@ -428,9 +440,12 @@ def make_frame_valid_mask(
     return frame_idx < frame_lengths.unsqueeze(1)
 
 
-def forward_batch(backbone, quality_head, batch):
+def forward_batch(backbone, quality_head, batch, normalize_wav: bool = True):
     wav = batch["wav"].to(DEVICE, dtype=torch.float32)
     attention_mask = batch["attention_mask"].to(DEVICE)
+
+    if normalize_wav:
+        wav = normalize_waveform(wav, attention_mask)
 
     output = backbone(
         input_values=wav,
@@ -451,7 +466,13 @@ def forward_batch(backbone, quality_head, batch):
 # ======================================================================
 
 @torch.no_grad()
-def evaluate(backbone, quality_head, loader):
+def evaluate(
+    backbone,
+    quality_head,
+    loader,
+    normalize_wav: bool = True,
+    max_batches: int | None = None,
+):
     backbone.eval()
     quality_head.eval()
 
@@ -459,13 +480,15 @@ def evaluate(backbone, quality_head, loader):
     targets = []
 
     use_amp = USE_AMP and DEVICE.type == "cuda"
-    for batch in loader:
+    for batch_idx, batch in enumerate(loader, start=1):
+        if max_batches is not None and batch_idx > max_batches:
+            break
         with torch.autocast(
             device_type="cuda",
             dtype=torch.float16,
             enabled=use_amp,
         ):
-            pred = forward_batch(backbone, quality_head, batch)
+            pred = forward_batch(backbone, quality_head, batch, normalize_wav=normalize_wav)
         target = batch["target"].to(DEVICE)
 
         predictions.append(pred.float().cpu())
@@ -503,6 +526,13 @@ def train_one_epoch(
     global_step,
     scheduler=None,
     grad_accum_steps=GRAD_ACCUM_STEPS,
+    w_mse: float = W_MSE,
+    w_ccc: float = W_CCC,
+    w_pcc: float = W_PCC,
+    w_rank: float = W_RANK,
+    rank_margin: float = RANK_MARGIN,
+    normalize_wav: bool = NORMALIZE_WAV,
+    max_batches: int | None = None,
 ):
     backbone.train()
     quality_head.train()
@@ -515,20 +545,24 @@ def train_one_epoch(
     num_updates = 0
 
     use_amp = USE_AMP and DEVICE.type == "cuda"
+    total_batches = len(loader) if max_batches is None else min(len(loader), max_batches)
 
     for batch_idx, batch in enumerate(loader, start=1):
+        if max_batches is not None and batch_idx > max_batches:
+            break
+
         with torch.autocast(
             device_type="cuda",
             dtype=torch.float16,
             enabled=use_amp,
         ):
-            pred = forward_batch(backbone, quality_head, batch)
+            pred = forward_batch(backbone, quality_head, batch, normalize_wav=normalize_wav)
             target = batch["target"].to(DEVICE)
 
             accum_preds.append(pred)
             accum_targets.append(target)
 
-        if batch_idx % grad_accum_steps == 0 or batch_idx == len(loader):
+        if batch_idx % grad_accum_steps == 0 or batch_idx == total_batches:
             preds_chunk = torch.cat(accum_preds)
             targets_chunk = torch.cat(accum_targets)
 
@@ -537,14 +571,25 @@ def train_one_epoch(
                 dtype=torch.float16,
                 enabled=use_amp,
             ):
-                # Hybrid loss: 0.4 MSE + 0.3 (1-CCC) + 0.3 (1-PCC)
-                loss = quality_loss(
+                # Base loss: w_mse MSE + w_ccc (1-CCC) + w_pcc (1-PCC)
+                base_loss = quality_loss(
                     preds_chunk.float(),
                     targets_chunk.float(),
-                    w_mse=0.4,
-                    w_ccc=0.3,
-                    w_pcc=0.3,
+                    w_mse=w_mse,
+                    w_ccc=w_ccc,
+                    w_pcc=w_pcc,
                 )
+
+                if w_rank > 0.0:
+                    rank_loss = pairwise_ranking_loss(
+                        preds_chunk.float(),
+                        targets_chunk.float(),
+                        margin=rank_margin,
+                    )
+                    loss = base_loss + w_rank * rank_loss
+                else:
+                    rank_loss = preds_chunk.new_zeros(())
+                    loss = base_loss
 
             if not torch.isfinite(loss):
                 raise RuntimeError(
@@ -577,17 +622,19 @@ def train_one_epoch(
             accum_preds = []
             accum_targets = []
 
+            print_interval = max(1, PRINT_EVERY // grad_accum_steps)
             if (
                 num_updates == 1
-                or num_updates % (PRINT_EVERY // GRAD_ACCUM_STEPS or 1) == 0
-                or batch_idx == len(loader)
+                or num_updates % print_interval == 0
+                or batch_idx == total_batches
             ):
                 print(
                     f"Epoch {epoch:02d} "
-                    f"| batch {batch_idx:04d}/{len(loader):04d} "
+                    f"| batch {batch_idx:04d}/{total_batches:04d} "
                     f"| step {global_step:04d} "
-                    f"| chunk_loss={loss.item():.6f} "
-                    f"| lr_lora={optimizer.param_groups[0]['lr']:.2e}"
+                    f"| loss={loss.item():.4f} "
+                    f"(base={base_loss.item():.4f}, rank={rank_loss.item():.4f}) "
+                    f"| lr={optimizer.param_groups[0]['lr']:.2e}"
                 )
 
     return running_loss / max(num_updates, 1), global_step
@@ -610,14 +657,35 @@ def main():
     parser.add_argument("--seed", type=int, default=SEED, help="Random seed")
     parser.add_argument("--csv-path", type=str, default=str(CSV_PATH), help="Path to CSV dataset (if auto-splitting)")
     parser.add_argument("--val-ratio", type=float, default=VAL_RATIO, help="Validation ratio (if auto-splitting)")
-    parser.add_argument("--train-csv", type=str, default=None, help="Path to explicit train CSV (e.g. data/qualispeech/train.csv)")
-    parser.add_argument("--val-csv", type=str, default=None, help="Path to explicit val CSV (e.g. data/qualispeech/val.csv)")
+    parser.add_argument("--train-csv", type=str, default=None, help="Path to explicit train CSV (e.g. data/qualispeech/train_val.csv)")
+    parser.add_argument("--val-csv", type=str, default=None, help="Path to explicit val CSV (e.g. data/qualispeech/test.csv)")
     parser.add_argument("--test-csv", type=str, default=None, help="Path to explicit test CSV (e.g. data/qualispeech/test.csv)")
+    parser.add_argument("--checkpoint-path", type=str, default=None, help="Path to save best checkpoint")
+    parser.add_argument("--w-mse", type=float, default=W_MSE, help="Weight for MSE loss")
+    parser.add_argument("--w-ccc", type=float, default=W_CCC, help="Weight for (1-CCC) loss")
+    parser.add_argument("--w-pcc", type=float, default=W_PCC, help="Weight for (1-PCC) loss")
+    parser.add_argument("--w-rank", type=float, default=W_RANK, help="Weight for Pairwise Ranking Loss")
+    parser.add_argument("--rank-margin", type=float, default=RANK_MARGIN, help="Margin for Pairwise Ranking Loss")
+    parser.add_argument("--normalize-wav", action=argparse.BooleanOptionalAction, default=NORMALIZE_WAV, help="Normalize waveform (zero-mean unit-variance on active speech)")
+    parser.add_argument("--save-preds", action="store_true", help="Save predictions CSV on val/dev set")
+    parser.add_argument("--save-history", type=str, default=None, help="JSON path to save training history")
+    parser.add_argument("--quality-head-type", type=str, default="standard", choices=["standard", "utmos_nisqa"], help="Quality head type: standard or utmos_nisqa")
+    parser.add_argument("--bilstm-hidden", type=int, default=128, help="BiLSTM hidden units for utmos_nisqa quality head")
+    parser.add_argument("--max-train-batches", type=int, default=None, help="Max train batches per epoch (for smoke testing)")
+    parser.add_argument("--max-val-batches", type=int, default=None, help="Max val batches per evaluation (for smoke testing)")
     args = parser.parse_args()
 
     set_seed(args.seed)
 
     effective_bs = args.batch_size * args.grad_accum
+
+    if args.checkpoint_path:
+        checkpoint_path = Path(args.checkpoint_path)
+    elif args.train_csv and "train_val" in str(args.train_csv):
+        checkpoint_path = CHECKPOINT_DIR / "wavlm_manual_lora_trainval_best.pt"
+    else:
+        checkpoint_path = BEST_CHECKPOINT
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
     print("WAVLM-LARGE + MANUAL LoRA — FULL DATA TRAINING")
@@ -636,6 +704,9 @@ def main():
     print("LoRA LR / Head LR:      ", f"{args.lr_lora} / {args.lr_head}")
     print("Weight decay:           ", WEIGHT_DECAY)
     print("Head dropout:           ", DROPOUT_HEAD)
+    print("Normalize waveform:     ", args.normalize_wav)
+    print(f"Loss weights:            MSE={args.w_mse}, CCC={args.w_ccc}, PCC={args.w_pcc}, Rank={args.w_rank} (margin={args.rank_margin})")
+    print("Checkpoint output:      ", checkpoint_path)
     print("AMP:                    ", USE_AMP)
     print("Gradient checkpointing: ", USE_GRADIENT_CHECKPOINTING)
 
@@ -646,7 +717,7 @@ def main():
     if args.train_csv and args.val_csv:
         train_path = Path(args.train_csv)
         val_path = Path(args.val_csv)
-        print(f"Using explicit splits:\n  Train: {train_path}\n  Val:   {val_path}")
+        print(f"\nUsing explicit splits:\n  Train: {train_path}\n  Val:   {val_path}")
 
         train_dataset = QualiSpeechDataset(csv_path=train_path, wav_dir=WAV_DIR)
         val_dataset = QualiSpeechDataset(csv_path=val_path, wav_dir=WAV_DIR)
@@ -741,14 +812,23 @@ def main():
     # QUALITY HEAD & OPTIMIZER
     # ------------------------------------------------------------------
     hidden_size = backbone.config.hidden_size
-    quality_head = QualityHead(
-        hidden_size=hidden_size,
-        dropout=DROPOUT_HEAD,
-    ).to(DEVICE)
+    if args.quality_head_type == "utmos_nisqa":
+        quality_head = UtmosNisqaQualityHead(
+            hidden_size=hidden_size,
+            bilstm_hidden=args.bilstm_hidden,
+            dropout=DROPOUT_HEAD,
+            use_fault_features=False,
+        ).to(DEVICE)
+    else:
+        quality_head = QualityHead(
+            hidden_size=hidden_size,
+            dropout=DROPOUT_HEAD,
+        ).to(DEVICE)
 
     lora_params = [p for p in backbone.parameters() if p.requires_grad]
     head_params = [p for p in quality_head.parameters() if p.requires_grad]
 
+    print(f"Quality Head Type:                {args.quality_head_type}")
     print(f"LoRA trainable parameters:        {sum(p.numel() for p in lora_params):,}")
     print(f"QualityHead trainable parameters: {sum(p.numel() for p in head_params):,}")
 
@@ -760,7 +840,8 @@ def main():
         weight_decay=WEIGHT_DECAY,
     )
 
-    total_steps = (len(train_loader) // args.grad_accum + 1) * args.epochs
+    effective_train_batches = len(train_loader) if args.max_train_batches is None else min(len(train_loader), args.max_train_batches)
+    total_steps = (effective_train_batches // args.grad_accum + 1) * args.epochs
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
         T_max=total_steps,
@@ -777,7 +858,13 @@ def main():
     # ------------------------------------------------------------------
     print()
     print("INITIAL VALIDATION (EPOCH 0)")
-    initial = evaluate(backbone, quality_head, val_loader)
+    initial = evaluate(
+        backbone,
+        quality_head,
+        val_loader,
+        normalize_wav=args.normalize_wav,
+        max_batches=args.max_val_batches,
+    )
     print(
         f"Init | MSE={initial['mse']:.6f} | "
         f"MAE={initial['mae']:.6f} | "
@@ -788,6 +875,7 @@ def main():
     best_val_pcc = -float("inf")
     best_epoch = -1
     global_step = 0
+    history = []
 
     print()
     print("=" * 70)
@@ -805,9 +893,32 @@ def main():
             global_step,
             scheduler=scheduler,
             grad_accum_steps=args.grad_accum,
+            w_mse=args.w_mse,
+            w_ccc=args.w_ccc,
+            w_pcc=args.w_pcc,
+            w_rank=args.w_rank,
+            rank_margin=args.rank_margin,
+            normalize_wav=args.normalize_wav,
+            max_batches=args.max_train_batches,
         )
 
-        val_result = evaluate(backbone, quality_head, val_loader)
+        val_result = evaluate(
+            backbone,
+            quality_head,
+            val_loader,
+            normalize_wav=args.normalize_wav,
+            max_batches=args.max_val_batches,
+        )
+
+        epoch_record = {
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "val_mse": val_result["mse"],
+            "val_mae": val_result["mae"],
+            "val_ccc": val_result["ccc"],
+            "val_pcc": val_result["pcc"],
+        }
+        history.append(epoch_record)
 
         print(
             f"\nEpoch {epoch:02d} Complete | "
@@ -830,6 +941,20 @@ def main():
                     "global_step": global_step,
                     "model_name": MODEL_NAME,
                     "hidden_size": hidden_size,
+                    "quality_head_type": args.quality_head_type,
+                    "quality_head_kwargs": {
+                        "bilstm_hidden": args.bilstm_hidden,
+                        "dropout": DROPOUT_HEAD,
+                        "use_fault_features": False,
+                    } if args.quality_head_type == "utmos_nisqa" else {},
+                    "normalize_wav": args.normalize_wav,
+                    "lora_r": args.lora_r,
+                    "lora_alpha": args.lora_alpha,
+                    "w_mse": args.w_mse,
+                    "w_ccc": args.w_ccc,
+                    "w_pcc": args.w_pcc,
+                    "w_rank": args.w_rank,
+                    "rank_margin": args.rank_margin,
                     "lora_state_dict": extract_lora_state_dict(backbone),
                     "quality_head_state_dict": quality_head.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
@@ -838,7 +963,7 @@ def main():
                     "val_ccc": val_result["ccc"],
                     "val_pcc": val_result["pcc"],
                 },
-                BEST_CHECKPOINT,
+                checkpoint_path,
             )
             print(f"  -> NEW BEST CHECKPOINT (epoch={epoch}, VAL PCC={best_val_pcc:.6f})")
 
@@ -850,16 +975,22 @@ def main():
     print("RESTORE BEST CHECKPOINT")
     print("=" * 70)
 
-    ckpt = torch.load(BEST_CHECKPOINT, map_location=DEVICE)
+    ckpt = torch.load(checkpoint_path, map_location=DEVICE)
     load_lora_state_dict(backbone, ckpt["lora_state_dict"])
     quality_head.load_state_dict(ckpt["quality_head_state_dict"])
 
     print("Best epoch:      ", ckpt["epoch"])
     print("Best global step:", ckpt["global_step"])
     print("Best val PCC:    ", f"{ckpt['val_pcc']:.6f}")
-    print("Checkpoint:      ", BEST_CHECKPOINT)
+    print("Checkpoint:      ", checkpoint_path)
 
-    final = evaluate(backbone, quality_head, val_loader)
+    final = evaluate(
+        backbone,
+        quality_head,
+        val_loader,
+        normalize_wav=args.normalize_wav,
+        max_batches=args.max_val_batches,
+    )
     print()
     print("=" * 70)
     print("FINAL RESULT — BEST VALIDATION CHECKPOINT")
@@ -869,12 +1000,46 @@ def main():
     print(f"VAL CCC: {final['ccc']:.8f}")
     print(f"VAL PCC: {final['pcc']:.8f}")
 
+    if args.save_preds:
+        try:
+            if hasattr(val_loader.dataset, "df"):
+                val_ids = val_loader.dataset.df["id"].astype(str).tolist()
+            elif hasattr(val_loader.dataset, "dataset") and hasattr(val_loader.dataset, "indices"):
+                val_ids = val_loader.dataset.dataset.df.iloc[val_loader.dataset.indices]["id"].astype(str).tolist()
+            else:
+                val_ids = [f"sample_{i}" for i in range(len(final["predictions"]))]
+
+            df_preds = pd.DataFrame({
+                "id": val_ids[:len(final["predictions"])],
+                "target": final["targets"].numpy(),
+                "predicted": final["predictions"].numpy(),
+            })
+            preds_csv = checkpoint_path.with_name(checkpoint_path.stem + "_dev_preds.csv")
+            df_preds.to_csv(preds_csv, index=False)
+            print(f"Saved dev predictions to: {preds_csv}")
+        except Exception as e:
+            print(f"Warning: could not save predictions CSV: {e}")
+
+    history_path = Path(args.save_history) if args.save_history else checkpoint_path.with_name(checkpoint_path.stem + "_history.json")
+    try:
+        with open(history_path, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
+        print(f"Saved training history to: {history_path}")
+    except Exception as e:
+        print(f"Warning: could not save history JSON: {e}")
+
     if test_loader is not None:
         print()
         print("=" * 70)
-        print("FINAL BLIND TEST EVALUATION (QualiSpeech test.csv)")
+        print("FINAL BLIND TEST EVALUATION")
         print("=" * 70)
-        test_final = evaluate(backbone, quality_head, test_loader)
+        test_final = evaluate(
+            backbone,
+            quality_head,
+            test_loader,
+            normalize_wav=args.normalize_wav,
+            max_batches=args.max_val_batches,
+        )
         print(f"TEST MSE: {test_final['mse']:.8f}")
         print(f"TEST MAE: {test_final['mae']:.8f}")
         print(f"TEST CCC: {test_final['ccc']:.8f}")
@@ -886,3 +1051,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
