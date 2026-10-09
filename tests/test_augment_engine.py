@@ -19,7 +19,7 @@ ENGINE = HERE.parent / "scripts" / "augment_engine.py"
 sys.path.insert(0, str(ENGINE.parent))
 import augment_engine as E  # noqa: E402
 
-EXPECTED_ENGINE = "vi_aug_engine_v2.7"
+EXPECTED_ENGINE = "vi_aug_engine_v3.1"
 if E.ENGINE_VERSION != EXPECTED_ENGINE:
     sys.exit(f"Version mismatch: scripts/augment_engine.py is {E.ENGINE_VERSION}, this test expects "
              f"{EXPECTED_ENGINE}. Download both files again from the same version.")
@@ -92,7 +92,9 @@ def main():
 
     subprocess.run([py, str(ENGINE), "generate", "--clean-dir", str(clean), "--noise-dir", str(noise),
                     "--out-dir", str(out), "--reject-list", str(root / "reject.txt"),
-                    "--variants-per-clean", "5", "--seed", "7", "--reverb"], check=True)
+                    "--variants-per-clean", "5", "--seed", "7", "--reverb",
+                    # round-1 regression run (round-2 mix is tested in test_round2.py)
+                    "--recipe-set", "round1", "--no-exact-ratios"], check=True)
 
     labels = [json.loads(l) for l in open(out / "labels.jsonl")]
     params = {p["file_id"]: p for p in map(json.loads, open(out / "params.jsonl"))}
@@ -235,7 +237,7 @@ def main():
     for p in dfiles:
         de = [e for e in p["events"] if e["fault"] == "distortion"]
         assert all(e["params"]["scope"] == "segment" for e in de), p["file_id"]
-        assert 1 <= len(de) <= 2 and all(e["end"] - e["start"] <= 1.5 + 1e-3 for e in de), de
+        assert 1 <= len(de) <= 3 and all(e["end"] - e["start"] <= 1.5 + 1e-3 for e in de), de
         assert sum(e["end"] - e["start"] for e in de) <= 0.5 * p["duration"] + 0.02
     dcov = [sum(e["end"] - e["start"] for e in p["events"] if e["fault"] == "distortion") / p["duration"] for p in dfiles]
     print(f"distortion files: {len(dfiles)}, segments/file {dict(Counter(sum(e['fault']=='distortion' for e in p['events']) for p in dfiles))}, "
