@@ -128,3 +128,20 @@ def test_sqa_model_integration():
     assert fault_probs.shape == (2, 15, 3)
     assert torch.all(quality >= 1.0) and torch.all(quality <= 5.0)
     assert torch.all(fault_probs >= 0.0) and torch.all(fault_probs <= 1.0)
+
+
+def test_utmos_nisqa_head_padding_invariant():
+    """A clip scores the same alone and inside a zero-padded batch (packed BiLSTM)."""
+    torch.manual_seed(0)
+    head = UtmosNisqaQualityHead(hidden_size=16, bilstm_hidden=8, mlp_hidden=16, use_fault_features=False).eval()
+    short, long_ = torch.randn(1, 12, 16), torch.randn(1, 20, 16)
+    batch = torch.zeros(2, 20, 16)
+    batch[0, :12], batch[1] = short[0], long_[0]
+    batch[0, 12:] = 7.0                      # garbage in the padding must not matter
+    mask = torch.zeros(2, 20, dtype=torch.bool)
+    mask[0, :12] = True
+    mask[1] = True
+    with torch.no_grad():
+        together = head(batch, valid_mask=mask)
+        alone = torch.stack([head(short)[0], head(long_)[0]])
+    assert torch.allclose(together, alone, atol=1e-5), (together, alone)

@@ -155,6 +155,21 @@ class UtmosNisqaQualityHead(nn.Module):
         ])
         self.mlp = nn.Sequential(*layers)
 
+    def _run_bilstm(self, h: torch.Tensor, valid_mask: torch.Tensor | None) -> torch.Tensor:
+        """Without padding: plain BiLSTM. With padding (batch > 1, different lengths): packed sequences, so the
+        backward direction starts at each clip's last real frame and padded frames never leak into real ones.
+        A clip then gets the same score in a padded batch as alone (batch 1)."""
+        if valid_mask is None or bool(valid_mask.all()):
+            return self.bilstm(h)[0]
+        from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+
+        lengths = valid_mask.long().sum(dim=1).clamp_min(1).cpu()
+        with torch.autocast(device_type=h.device.type, enabled=False):
+            packed = pack_padded_sequence(h.float(), lengths, batch_first=True, enforce_sorted=False)
+            out, _ = self.bilstm(packed)
+            out, _ = pad_packed_sequence(out, batch_first=True, total_length=h.shape[1])
+        return out.to(h.dtype) if h.dtype in (torch.float16, torch.bfloat16) else out
+
     def forward(
         self,
         h: torch.Tensor,
@@ -167,7 +182,7 @@ class UtmosNisqaQualityHead(nn.Module):
         fault_probs: [B, T, n_fault_types] optional (probabilities from FaultFrameHead)
         """
         # Step 1: BiLSTM temporal contextualization
-        lstm_out, _ = self.bilstm(h)  # [B, T, lstm_out_dim]
+        lstm_out = self._run_bilstm(h, valid_mask)  # [B, T, lstm_out_dim]
 
         # Step 2: Attention weighting
         scores = self.attn_proj(lstm_out).squeeze(-1)  # [B, T]
