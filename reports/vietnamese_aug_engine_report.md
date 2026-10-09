@@ -217,31 +217,7 @@ Phần 12 % mẫu sạch dạy model rằng tiếng Việt chất lượng tốt
 
 ---
 
-## 5. Các điểm khác so với guide và lý do
-
-Cấu trúc 3 loại lỗi của guide được giữ nguyên. Các điểm khác:
-
-| # | Guide | Engine v1.8 | Lý do |
-|---|---|---|---|
-| 1 | Clipping: nhân 1,5–3 rồi `clip(±0,95)` | Ngưỡng tính theo tín hiệu, kẹp 2–15 % số mẫu, giữ nguyên âm lượng | Đo trên audio RMS 0,07 (đỉnh ~0,3–0,6): ×1,5 kẹp **0 %**, ×2 kẹp 0,01 %, ×3 kẹp 0,17 % số mẫu, gần như không nghe ra. Hậu quả: (a) nhãn `distortion` gắn cho file nghe vẫn sạch, tức nhãn sai; (b) thay đổi duy nhất là to lên 3,5–9,5 dB, model học mẹo "to = lỗi" |
-| 2 | Pause: khoảng lặng 0,3–1,2 s hoặc ngắt cụt | 1–2 đoạn dừng 0,4–0,8 s chèn giữa âm tiết; ngắt cụt tắt; pause là khoảng ngắt thuần (nền rất nhỏ, không có noise) | Team nghe và yêu cầu: lỗi pause là nói bị khựng, không phải mất âm tiết |
-| 3 | Noise trộn vào [t_start, t_end] | 1–2 đoạn 0,3–1,5 s bắt đầu tại khe âm tiết; 75 % trộn chồng lên giọng, 25 % chèn thêm vào khe; tổng ≤ 50 % file | Team yêu cầu: audio ngắn nên noise chỉ là đoạn chen ngắn, chủ yếu trộn lẫn với giọng, bắt đầu ở ranh giới âm tiết |
-| 4 | SNR (không định nghĩa rõ) | SNR theo mức active; nhãn chỉ phủ phần nghe thấy | Cách tính trung bình làm còi xe to hơn mức yêu cầu ~11 dB; đoạn noise gần im lặng mà vẫn gắn nhãn sẽ làm sai IoU |
-| 5 | Noise chọn đều | Quạt ×3; mưa và giao thông ×0,4 | Team yêu cầu: chủ yếu tiếng quạt rè đều, ít tiếng đường phố. Lần chạy thật đầu tiên (mưa ×3) cho mưa chiếm 58 % và nghe quá to, nên hạ mưa xuống bằng giao thông (09/10) |
-| 6 | Có nhóm rao hàng | Loại `street_vendor` (09/10); `loudspeaker` trộn 10–20 dB và làm xa | Giọng rao rõ chữ dễ thành người nói thứ hai |
-| 7 | — | Cân âm lượng sau distortion; gain output ngẫu nhiên ±6 dB | Tránh bước nhảy âm lượng và mẹo dựa trên âm lượng tuyệt đối |
-| 8 | — | Thêm `codec_lowbitrate`, `packet_loss`; codec thoại có µ-law 300–3400 Hz; bỏ `quantize` | Lỗi đặc trưng của Zalo call / VoIP / file nén; giảm bit nghe như noise nên bỏ |
-| 9 | Reverb thuộc distortion | Tùy chọn, tắt mặc định | Chưa rõ BTC có gán reverb là `distortion` hay không |
-
-**Quay lại đúng guide** ở chỗ nào thì chỉ cần thêm tham số:
-- pause: `--pause-min 0.3 --pause-max 1.2`
-- ngắt cụt: `--p-dropout 0.25`
-- reverb: `--reverb`
-- noise chọn đều theo nhóm: `--category-weights '{}'`
-
----
-
-## 6. Quy ước nhãn và file output
+## 5. Quy ước nhãn và file output
 
 | File | Nội dung |
 |---|---|
@@ -258,7 +234,7 @@ Cấu trúc 3 loại lỗi của guide được giữ nguyên. Các điểm khá
 
 ---
 
-## 7. Kiểm chứng (dữ liệu giả lập: 40 clean × 5 biến thể = 200 file)
+## 6. Kiểm chứng (dữ liệu giả lập: 40 clean × 5 biến thể = 200 file)
 
 | Kiểm tra | Kết quả |
 |---|---|
@@ -280,7 +256,7 @@ Cấu trúc 3 loại lỗi của guide được giữ nguyên. Các điểm khá
 
 ---
 
-## 8. Kết quả trên dữ liệu thật
+## 7. Kết quả trên dữ liệu thật
 
 Lần chạy chốt: engine `vi_aug_engine_v2.7`, `--seed 2026`, 09/10/2026. Số liệu lấy từ `data/vietnamese_aug/generation_report.md`.
 
@@ -302,6 +278,6 @@ Lần chạy chốt: engine `vi_aug_engine_v2.7`, `--seed 2026`, 09/10/2026. S�
 | Mức giọng p5 / median / p95 (dBFS) | −28,6 / −23,3 / −17,8; đỉnh tối đa −0,09 dBFS; 34 file được giảm gain để không vượt đỉnh (không tạo clipping) 
 
 
-## 9. Bàn giao
+## 8. Bàn giao
 
 - **Hiếu (chỉ MOS):** nhận `labels.jsonl` (đã có interval lỗi chính xác, lấy đúng vị trí engine chèn) và `params.jsonl`. Trong `params.jsonl`, mỗi file có danh sách lỗi đã chèn, cùng SNR, loại distortion và độ dài pause. Hiếu dùng các thông tin này để tính `quality_score` theo công thức mục 5 của guide. Gợi ý: noise lấy `snr_db` của sự kiện noise đầu tiên; pause lấy tổng thời gian các đoạn `unnatural_pause`.
