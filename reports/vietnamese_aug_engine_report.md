@@ -299,22 +299,9 @@ Lần chạy chốt: engine `vi_aug_engine_v2.7`, `--seed 2026`, 09/10/2026. S�
 | Distortion: loại | narrowband 146 (36 %), clipping 117 (29 %), codec_lowbitrate 89 (22 %), packet_loss 54 (13 %) |
 | Distortion: số đoạn | 1 đoạn: 246 file, 2 đoạn: 160 file; không file nào méo toàn bộ |
 | Pause | 1 đoạn: 191 file, 2 đoạn: 186 file; tổng thời gian dừng trung bình 0,90 s/file, tối đa 1,57 s |
-| Mức giọng p5 / median / p95 (dBFS) | −28,6 / −23,3 / −17,8; đỉnh tối đa −0,09 dBFS; 34 file được giảm gain để không vượt đỉnh (không tạo clipping) |
-
-**Nhận xét:**
-- Tỉ lệ các loại lỗi, tỉ lệ overlay/insert (73/27, đặt 75/25) và trọng số nhóm noise đều đúng như thiết kế.
-- `noise` có 456 file, trong khi số file được chọn để thêm noise là 475. Với 19 file còn lại, engine không tìm được khe âm tiết phù hợp nên không chèn; các file này không có nhãn noise, nhãn vẫn đúng.
-- `motorbike` có 36 file nhưng chỉ dùng chung **1 file noise gốc**. Đề xuất Hoàng bổ sung thêm bản ghi xe máy.
-- Trong `generation_report.md`, các dòng như `narrowband|narrowband` nghĩa là file đó có 2 đoạn cùng loại méo. Bảng trên đã gộp theo loại.
+| Mức giọng p5 / median / p95 (dBFS) | −28,6 / −23,3 / −17,8; đỉnh tối đa −0,09 dBFS; 34 file được giảm gain để không vượt đỉnh (không tạo clipping) 
 
 
 ## 9. Bàn giao
 
 - **Hiếu (chỉ MOS):** nhận `labels.jsonl` (đã có interval lỗi chính xác, lấy đúng vị trí engine chèn) và `params.jsonl`. Trong `params.jsonl`, mỗi file có danh sách lỗi đã chèn, cùng SNR, loại distortion và độ dài pause. Hiếu dùng các thông tin này để tính `quality_score` theo công thức mục 5 của guide. Gợi ý: noise lấy `snr_db` của sự kiện noise đầu tiên; pause lấy tổng thời gian các đoạn `unnatural_pause`.
-- **Kiên:**
-  - chạy `dataset_audit.py` trên `metadata.csv` và `wav/`;
-  - **chia fold theo `source_group_id`**;
-  - cache WavLM.
-- **Phước:** train 2 cấu hình là có và không có `vi_aug`. Đánh giá trên Golden 100 tiếng Việt và trên tập val tiếng Anh để kiểm tra không bị tụt.
-
----
