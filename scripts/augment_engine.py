@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """
-VLSP 2026 SQA - Vietnamese DSP augmentation engine  (owner: Thao, Speech Lead)   v1.8
+VLSP 2026 SQA - Vietnamese DSP augmentation engine  (owner: Thao, Speech Lead)   v3.0
+
+v3.0 (round 2, fast-track plan): default mix = clean 25 % / distortion 40 % / BGM 15 % / long noise 15 % /
+pause 5 %, drawn as EXACT quotas (shuffled with the seed) so 1,000 train and 125 test files hit the ratios.
+  bgm         : instrumental music (bgm_*.wav: piano, beat) mixed UNDER the speech for 60-100 % of the
+                file, SNR 5-20 dB between active levels, labelled `noise` on audible frames
+  noise_long  : continuous ambience (fan, cicada, hum, keyboard...) for 60-100 % of the file, SNR 3-20 dB
+  distortion  : 1-3 segments of 0.3-1.5 s ANCHORED ON SPEECH (>= 60 % active frames, label trimmed to the
+                speech inside the segment); new kind `crackle` = scattered crackle of a bad loudspeaker /
+                loose contact (micro-clipping bursts, contact drop-outs, clicks) gated by the speech envelope
+  --noise-dir accepts several folders; --id-prefix / --split name the test set (vi_test_v1_XXXXXX).
 
 Two sub-commands (CPU only, no GPU needed):
 
@@ -42,6 +52,12 @@ python scripts/augment_engine.py generate --reject-list reports/reject.txt --see
     --clean-dir data/vietnamese_audio_clean --noise-dir data/noise_bank/vietnamese_noise_bank \
     --out-dir data/vietnamese_aug
 
+Round 2 (v3.0, fast-track plan):
+python scripts/augment_engine.py generate --seed 2026 --clean-dir data/vietnamese_clean_v3/train \
+    --noise-dir data/vietnamese_noise_bank_v2 --out-dir data/vietnamese_aug_v3/train
+python scripts/augment_engine.py generate --seed 2026 --clean-dir data/vietnamese_clean_v3/test_sources \
+    --noise-dir data/vietnamese_noise_bank_v2 --out-dir data/vietnamese_test_v1 --id-prefix vi_test_v1 --split test
+
 Quick listening preview:  add  --limit 20 --out-dir data/vi_aug_preview
 
 Dependencies: numpy, scipy. soundfile is used if installed (needed for .flac);
@@ -72,7 +88,7 @@ from scipy.io import wavfile
 SR = 16000
 HOP = 0.02                      # evaluator grid (20 ms), see SQA_ARCHITECTURE_SPEC M4
 FAULTS = ("noise", "distortion", "unnatural_pause")
-ENGINE_VERSION = "vi_aug_engine_v2.7"
+ENGINE_VERSION = "vi_aug_engine_v3.1"
 AUDIO_EXT = (".wav", ".flac")
 
 
@@ -121,7 +137,9 @@ def list_audio(d: Path) -> list[Path]:
     if not d.is_dir():
         raise SystemExit(f"[error] folder not found: {d.resolve()}\n"
                          f"        pass the real path with --clean-dir / --noise-dir")
-    files = sorted(p for p in d.rglob("*") if p.suffix.lower() in AUDIO_EXT)
+    # sub-folders starting with "_" (e.g. test_sources/_review_cv listening candidates) are skipped
+    files = sorted(p for p in d.rglob("*") if p.suffix.lower() in AUDIO_EXT
+                   and not any(part.startswith("_") for part in p.relative_to(d).parts[:-1]))
     if not files:
         raise SystemExit(f"[error] no .wav/.flac files under {d.resolve()}")
     return files
@@ -459,18 +477,40 @@ def apply_reverb(x: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, l
     return y, [Event("distortion", "reverb", 0.0, len(y) / SR, {"rt60": rt60})]
 
 
+def is_music(stem: str) -> bool:
+    return stem.lower().startswith("bgm_")
+
+
+def bank_category(stem: str) -> str:
+    """bgm_piano_01 -> bgm_piano ; noise_ceiling_fan_01 -> ceiling_fan ; other names -> 'other'."""
+    m = re.match(r"(bgm_.+?)(?:_\d+)+$", stem)
+    if m:
+        return m.group(1)
+    return noise_category(stem) or "other"
+
+
 class NoiseBank:
-    def __init__(self, d: Path, exclude: set[str], weights: dict | None = None):
+    def __init__(self, d, exclude: set[str], weights: dict | None = None, music: bool | None = None,
+                 required: bool = True, only: list[str] | None = None):
+        """d: folder or list of folders. music=True -> only bgm_*.wav, False -> only the others."""
         self.by_cat: dict[str, list[tuple[str, np.ndarray]]] = defaultdict(list)
-        for p in list_audio(d):
-            if p.name in exclude:
-                continue
-            x, _ = load_audio(p)
-            cat = noise_category(p.stem) or "other"
-            if np.sqrt(np.mean(x ** 2)) > 1e-4:
-                self.by_cat[cat].append((p.name, x))
-        if not self.by_cat:
-            raise SystemExit(f"noise bank {d} is empty")
+        dirs = [Path(q) for q in (d if isinstance(d, (list, tuple)) else [d])]
+        for dd in dirs:
+            for p in list_audio(dd):
+                if p.name in exclude or (music is not None and is_music(p.stem) != music):
+                    continue
+                cat = bank_category(p.stem)
+                if only and not any(cat.startswith(o) for o in only):
+                    continue
+                x, _ = load_audio(p)
+                if np.sqrt(np.mean(x ** 2)) > 1e-5:
+                    self.by_cat[cat].append((p.name, x))
+        self.empty = not self.by_cat
+        if self.empty:
+            if required:
+                raise SystemExit(f"noise bank {[str(q) for q in dirs]} has no {'music' if music else 'noise'} files")
+            self.cats, self.cat_p = [], np.array([])
+            return
         self.cats = sorted(self.by_cat)
         w = np.array([float(_cat_lookup(weights or {}, c, 1.0)) for c in self.cats])
         self.cat_p = w / w.sum()
@@ -600,6 +640,106 @@ def apply_noise(x: np.ndarray, rng: np.random.Generator, bank: NoiseBank, cfg,
     return y, evs
 
 
+def audible_noise_events(zz: np.ndarray, p_speech: float, cfg, kind: str, params: dict) -> list[Event]:
+    """`noise` events on the frames where the ADDED signal zz is audible (>= speech level - noise_audible_snr)."""
+    thr = p_speech * 10 ** (-cfg.noise_audible_snr / 10)
+    nfr = int(HOP * SR)
+    m = len(zz) // nfr + (1 if len(zz) % nfr else 0)
+    zp = np.pad(zz, (0, m * nfr - len(zz)))
+    loud = np.mean(zp.reshape(m, nfr) ** 2, axis=1) >= thr
+    loud = _close_open(loud, close_frames=15, min_frames=1)          # fill gaps < 0.3 s
+    # an isolated audible event (keyboard click, beat) is NOT dropped: it is widened to >= 0.1 s
+    for a, b in _runs(loud.copy()):
+        if b - a < 5:
+            c = (a + b) // 2
+            loud[max(0, c - 2):min(m, c + 3)] = True
+    return [Event("noise", kind, a * HOP, min(b * HOP, len(zz) / SR), dict(params)) for a, b in _runs(loud)]
+
+
+def apply_bed(x: np.ndarray, rng: np.random.Generator, bank: "NoiseBank", cfg, kind: str) -> tuple[np.ndarray, list[Event]]:
+    """Background layer UNDER the speech (kind 'bgm' = instrumental music, 'long' = ambience such as fan /
+    cicadas / hum / keyboard). One category, one source stream and one SNR (between active levels) per file.
+    Coverage mode per file (team review of the private test: about half of the noisy files had noise over the
+    whole / most of the clip, half only in parts, e.g. "tap am tu 2-3s", "piano tu 1.3-3.8s", "rai rac"):
+      whole   (p = --bed-p-full)    : the whole file
+      long    (p = --bed-p-long)    : one stretch of 60-90 % of the file
+      partial (the rest)            : 1-3 pieces of 0.5-4 s (total <= 60 % of the file, >= 0.3 s apart)
+    Fades 0.3 s (shorter for short pieces); labelled `noise` only where audible."""
+    n = len(x)
+    dur = n / SR
+    cat = bank.pick_category(rng)
+    dflt = (cfg.bgm_snr_min, cfg.bgm_snr_max) if kind == "bgm" else (cfg.bed_snr_min, cfg.bed_snr_max)
+    lo, hi = _cat_lookup(cfg.category_snr, cat, dflt)
+    snr = float(rng.uniform(lo, hi))
+    z, _, name, off = bank.draw(n, rng, cat=cat)              # one continuous source stream for the file
+    distant = None
+    if _cat_lookup({c: True for c in cfg.distant_categories}, cat, False):   # v1 loudspeaker etc.
+        z, distant = make_distant(z, rng)
+    p_speech = active_speech_power(x)
+    p_act = active_speech_power(z)
+    g = math.sqrt(p_speech / (p_act * 10 ** (snr / 10)))
+    u = rng.random()
+    cov_mode = "whole" if u < cfg.bed_p_full else "long" if u < cfg.bed_p_full + cfg.bed_p_long else "partial"
+    # short-event categories (default: keyboard -> 1-2 pieces of 0.4-0.6 s): always partial, and each piece is
+    # placed where the source stream actually has events (keystrokes), never stretched over the whole file
+    forced = _cat_lookup(cfg.category_pieces, cat, None)
+    if forced:
+        cov_mode = "partial"
+        c_lo, c_hi, l_lo, l_hi = forced
+        act_z = active_mask(z)
+    for attempt in range(4):
+        if attempt == 3 and forced:                          # loudest window of the source, one piece
+            L = int(l_hi * SR)
+            e = np.convolve(z.astype(np.float64) ** 2, np.ones(L), mode="valid")
+            s0 = int(np.argmax(e))
+            segs = [(s0, s0 + L)]
+        elif attempt == 3:
+            cov_mode = "whole"                                 # pieces fell on silent parts of the source
+        if cov_mode == "whole":
+            segs = [(0, n)]
+        elif cov_mode == "long":
+            L = int(n * rng.uniform(cfg.bed_cover_min, cfg.bed_cover_max))
+            s0 = int(rng.integers(0, n - L + 1))
+            segs = [(s0, s0 + L)]
+        else:
+            if forced:
+                k = int(rng.integers(c_lo, c_hi + 1))
+            else:
+                k = int(rng.integers(cfg.bed_seg_count_min, cfg.bed_seg_count_max + 1))
+            segs = []
+            for _ in range(k):
+                if forced:
+                    L = float(rng.uniform(l_lo, l_hi))
+                else:
+                    L = float(rng.uniform(cfg.bed_seg_min, min(cfg.bed_seg_max, 0.6 * dur)))
+                if sum(b - a for a, b in segs) / SR + L > cfg.bed_partial_max_cover * dur:
+                    break
+                for _try in range(60):
+                    a = float(rng.uniform(0, dur - L))
+                    sa, sb = int(a * SR), int((a + L) * SR)
+                    if forced and act_z[int(a / HOP):int((a + L) / HOP)].mean() < 0.3:
+                        continue                                 # no keystroke in this window
+                    if all(sb + int(0.3 * SR) <= c or sa >= d + int(0.3 * SR) for c, d in segs):
+                        segs.append((sa, sb))
+                        break
+            if not segs:
+                L = int(min(cfg.bed_seg_min, 0.6 * dur) * SR)
+                s0 = int(rng.integers(0, n - L + 1))
+                segs = [(s0, s0 + L)]
+        zz = np.zeros(n, np.float32)
+        for a, b in sorted(segs):
+            ramp = int(min(0.3, (b - a) / SR / 4) * SR)
+            zz[a:b] = z[a:b] * g * fade_window(b - a, ramp)
+        params = {"snr_db": snr, "category": cat, "snr_range": [lo, hi], "mode": kind, "coverage": cov_mode,
+                  "noise_file": name, "noise_offset_s": off, "spans": [[a / SR, b / SR] for a, b in sorted(segs)],
+                  "cover": sum(b - a for a, b in segs) / n, "n_segments": len(segs), "distant": distant,
+                  "snr_mean_power_db": snr + 10 * math.log10(p_act / (np.mean(z ** 2) + 1e-12))}
+        evs = audible_noise_events(zz, p_speech, cfg, kind, params)
+        if evs:
+            return (x + zz).astype(np.float32), evs
+    return x, []
+
+
 def _cat_lookup(table: dict, cat: str, default):
     """Exact category match first, then prefix match (street_vendor matches street_vendor_hn)."""
     if cat in table:
@@ -641,25 +781,31 @@ def _close_open(mask: np.ndarray, close_frames: int, min_frames: int) -> np.ndar
 
 
 def fx_narrowband(x: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, dict]:
-    """G.711-like: band-limit to telephone band, 8 kHz, 8-bit mu-law, back to 16 kHz."""
+    """Old-telephone channel: 8 kHz, band-pass lo 300-500 Hz / hi 2.6-3.4 kHz, mu-law 6-8 bit, back to 16 kHz.
+    v3.1: band edges and bit depth randomised harsher than plain G.711 (on already band-limited speech, e.g.
+    VIVOS / MP3 / TTS, a 300-3400 Hz G.711 channel was hardly audible)."""
+    lo_hz, hi_hz = float(rng.uniform(300, 500)), float(rng.uniform(2600, 3400))
+    bits = int(rng.integers(6, 9))
     y = signal.resample_poly(x, 1, 2)
-    b, a = signal.butter(4, [300 / 4000, 3400 / 4000], "band")
+    b, a = signal.butter(4, [lo_hz / 4000, hi_hz / 4000], "band")
     y = signal.lfilter(b, a, y)
     mu = 255.0
     pk = np.max(np.abs(y)) + 1e-9
+    q = 2 ** (bits - 1) - 0.5
     c = np.sign(y / pk) * np.log1p(mu * np.abs(y / pk)) / np.log1p(mu)
-    c = np.round((c + 1) * 127.5) / 127.5 - 1                      # 8-bit
+    c = np.round((c + 1) * q) / q - 1
     y = np.sign(c) * (np.power(1 + mu, np.abs(c)) - 1) / mu * pk
     y = signal.resample_poly(y, 2, 1)[: len(x)]
-    return y.astype(np.float32), {"codec": "g711_mulaw_8k"}
+    return y.astype(np.float32), {"codec": "mulaw_8k", "band_hz": [lo_hz, hi_hz], "bits": bits}
 
 
 def fx_clipping(x: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, dict]:
     """Hard clip at a threshold below the peak, then restore loudness.
     The guide's `gain 1.5-3 then clip at 0.95` does not clip at all on files normalised to
     RMS 0.05-0.1 (peaks ~0.3-0.6), so the threshold is set relative to the signal instead:
-    a random fraction (2-15 %) of speech samples gets clipped."""
-    frac = float(rng.uniform(0.02, 0.15))
+    a random fraction (v3.1: 10-30 %, was 2-15 % = hardly audible) of the speech samples of the SEGMENT gets
+    clipped (the fx runs on each segment, so the threshold is set by the segment's own speech)."""
+    frac = float(rng.uniform(0.10, 0.30))
     act = np.abs(x[np.abs(x) > 1e-3])
     thr = float(np.quantile(act, 1 - frac)) if len(act) else 0.5
     y = np.clip(x, -thr, thr)
@@ -676,16 +822,27 @@ def fx_quantize(x: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, di
 
 
 def fx_packet_loss(x: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, dict]:
-    """VoIP-style 20 ms frame erasures concealed by repeating the previous frame (robotic/buzzy)."""
+    """VoIP packet loss: BURSTS of 1-3 lost 20 ms frames (15-35 % of frames). Per file the concealment is
+    either 'zero' (audible gaps / stutter) or 'repeat' (previous frame x0.6, robotic buzz).
+    v3.1: single-frame repeat x0.9 (v2.x) was nearly inaudible on voiced speech."""
     n = int(0.02 * SR)
     y = x.copy()
-    rate = float(rng.uniform(0.1, 0.3))
-    lost = 0
-    for i in range(1, len(x) // n):
-        if rng.random() < rate:
-            y[i * n:(i + 1) * n] = y[(i - 1) * n:i * n] * 0.9
-            lost += 1
-    return y, {"loss_rate": rate, "frames_lost": lost}
+    rate = float(rng.uniform(0.15, 0.35))
+    conceal = "zero" if rng.random() < 0.5 else "repeat"
+    lost, i, nf = 0, 1, len(x) // n
+    while i < nf:
+        if rng.random() < rate / 2:                     # burst start; mean burst 2 frames -> ~rate lost
+            k = int(rng.integers(1, 4))
+            for j in range(i, min(nf, i + k)):
+                if conceal == "zero":
+                    y[j * n:(j + 1) * n] = 0.0
+                else:
+                    y[j * n:(j + 1) * n] = y[(j - 1) * n:j * n] * 0.6
+                lost += 1
+            i += k + 1
+        else:
+            i += 1
+    return y.astype(np.float32), {"loss_rate": rate, "frames_lost": lost, "concealment": conceal}
 
 
 def fx_codec_lowbitrate(x: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, dict]:
@@ -708,47 +865,163 @@ def fx_codec_lowbitrate(x: np.ndarray, rng: np.random.Generator) -> tuple[np.nda
     return y.astype(np.float32), {"bins_kept": keep, "lowpass_hz": cutoff}
 
 
+def fx_crackle(x: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, dict]:
+    """Scattered crackle ('re loa', loose contact, damaged speaker): three speech-gated components
+      - micro-clipping bursts: 5-30 ms windows hard-clipped at 5-20 % of the local peak (20-50 per s)
+      - contact drop-outs   : 2-8 ms gaps where the gain falls to 0-0.1 (25-60 per s)
+      - clicks              : 0.5-2 ms impulses of random sign, 1-3 x the local envelope (60-180 per s)
+    (v3.1 densities / depths raised: the v3.0 setting was too subtle on real speech)
+    Everything scales with the speech envelope, so silence stays silent (it is not background noise)."""
+    n = len(x)
+    y = x.astype(np.float64).copy()
+    win = max(1, int(0.005 * SR))
+    env = np.sqrt(np.convolve(x.astype(np.float64) ** 2, np.ones(win) / win, mode="same")) * math.sqrt(2)
+    dur = n / SR
+    r_clip, r_drop, r_click = (float(rng.uniform(20, 50)), float(rng.uniform(25, 60)), float(rng.uniform(60, 180)))
+    for _ in range(int(rng.poisson(r_clip * dur))):
+        L = int(rng.uniform(0.005, 0.03) * SR)
+        a = int(rng.integers(0, max(1, n - L)))
+        seg = y[a:a + L]
+        if seg.size:
+            t = float(rng.uniform(0.05, 0.20)) * (np.max(np.abs(seg)) + 1e-9)
+            y[a:a + L] = np.clip(seg, -t, t)
+    for _ in range(int(rng.poisson(r_drop * dur))):
+        L = int(rng.uniform(0.002, 0.008) * SR)
+        a = int(rng.integers(0, max(1, n - L)))
+        y[a:a + L] *= float(rng.uniform(0.0, 0.1))
+    for _ in range(int(rng.poisson(r_click * dur))):
+        L = max(3, int(rng.uniform(0.0005, 0.002) * SR))
+        a = int(rng.integers(0, max(1, n - L)))
+        y[a:a + L] += rng.choice([-1.0, 1.0]) * float(rng.uniform(1.0, 3.0)) * env[a] * np.hanning(L)
+    return y.astype(np.float32), {"clip_bursts_per_s": r_clip, "dropouts_per_s": r_drop, "clicks_per_s": r_click}
+
+
 DIST_FX = {"narrowband": fx_narrowband, "clipping": fx_clipping, "codec_lowbitrate": fx_codec_lowbitrate,
-           "quantize": fx_quantize, "packet_loss": fx_packet_loss}
+           "quantize": fx_quantize, "packet_loss": fx_packet_loss, "crackle": fx_crackle}
 
 
-def apply_distortion(x: np.ndarray, rng: np.random.Generator, cfg) -> tuple[np.ndarray, list[Event]]:
+def apply_distortion(x: np.ndarray, rng: np.random.Generator, cfg,
+                     ref: np.ndarray | None = None) -> tuple[np.ndarray, list[Event]]:
     kinds = list(cfg.dist_kinds)
     w = np.array([cfg.dist_weights.get(k, 1.0) for k in kinds], dtype=float)
     kind = kinds[rng.choice(len(kinds), p=w / w.sum())]
     dur = len(x) / SR
-    y_full, params = DIST_FX[kind](x, rng)
-    # keep the active level unchanged (narrowband alone drops it by ~5 dB), otherwise a segment
-    # splice creates a loudness step that is an extra, unlabelled cue
-    lvl = math.sqrt(active_speech_power(x) / active_speech_power(y_full))
-    y_full = (y_full * lvl).astype(np.float32)
-    params["level_match_db"] = 20 * math.log10(lvl)
     if rng.random() < cfg.p_dist_full:          # off by default: whole-file distortion is not noticeable
-        return y_full, [Event("distortion", kind, 0.0, dur, {**params, "scope": "full"})]
-    # SHORT segments: the contrast clean -> distorted -> clean is what makes distortion audible
+        y_full, params = DIST_FX[kind](x, rng)
+        lvl = math.sqrt(active_speech_power(x) / active_speech_power(y_full))
+        params["level_match_db"] = 20 * math.log10(lvl)
+        return (y_full * lvl).astype(np.float32), [Event("distortion", kind, 0.0, dur, {**params, "scope": "full"})]
+    # SHORT segments: the contrast clean -> distorted -> clean is what makes distortion audible.
+    # v3.0: segments are ANCHORED ON SPEECH (distortion on silence is inaudible but would be labelled):
+    # a candidate needs >= --dist-min-active of active 20 ms frames, and is then trimmed to the first/last
+    # active frame inside it, so the label covers only speech that was actually degraded.
+    # speech activity from the signal BEFORE background noise was added (same length), else from x
+    act = active_mask(ref if ref is not None and len(ref) == len(x) else x)
     n = int(rng.integers(cfg.dist_seg_count_min, cfg.dist_seg_count_max + 1))
     cap = min(cfg.dist_seg_max, 0.35 * dur)
     lo = min(cfg.dist_seg_min, cap)
+
+    def trim_to_speech(a: float, b: float) -> tuple[float, float] | None:
+        i0, i1 = int(a / HOP), min(len(act), int(math.ceil(b / HOP)))
+        idx = np.flatnonzero(act[i0:i1])
+        if i1 <= i0 or len(idx) < cfg.dist_min_active * (i1 - i0):
+            return None
+        a2, b2 = max(a, (i0 + idx[0]) * HOP), min(b, dur, (i0 + idx[-1] + 1) * HOP)
+        return (a2, b2) if b2 - a2 >= 0.2 else None
+
     segs: list[tuple[float, float]] = []
     for _ in range(n):
         L = float(rng.uniform(lo, cap))
         if sum(b - a for a, b in segs) + L > cfg.dist_max_cover * dur:
             break
-        for _try in range(30):
+        for _try in range(60):
             a = float(rng.uniform(0, dur - L))
-            if all(a + L + 0.3 <= s0 or a >= s1 + 0.3 for s0, s1 in segs):
-                segs.append((a, a + L))
+            t = trim_to_speech(a, a + L)
+            if t and all(t[1] + 0.3 <= s0 or t[0] >= s1 + 0.3 for s0, s1 in segs):
+                segs.append(t)
                 break
-    if not segs:                                # very short file: one minimal segment
-        a0 = float(rng.uniform(0, dur - lo))
-        segs = [(a0, a0 + lo)]
-    y = x
+    if not segs:                                # short / sparse file: densest speech stretch of length lo
+        k = max(1, int(lo / HOP))
+        dens = np.convolve(act.astype(float), np.ones(k), mode="valid") if len(act) >= k else np.array([act.sum()])
+        i = int(np.argmax(dens))
+        segs = [trim_to_speech(i * HOP, min(dur, i * HOP + lo)) or (i * HOP, min(dur, i * HOP + lo))]
+    # v3.1: the fx runs on EACH segment (+50 ms context), so signal-relative settings (clipping threshold)
+    # come from that segment's own speech; every segment must pass an AUDIBILITY GATE: score =
+    # max(log-mel distance, 5 ms envelope distance) in dB against the clean segment >= --dist-min-audibility.
+    # Up to --dist-retries fresh draws of the same kind; if none passes, the segment falls back to
+    # codec_lowbitrate (always clearly audible). The score is logged (`audibility_db`) for MOS / paper.
+    y = x.copy()
     evs = []
+    pad = int(0.05 * SR)
     for a, b in sorted(segs):
         s0, e0 = int(a * SR), min(len(x), int(b * SR))
-        y = splice(y, y_full, s0, e0, int(0.01 * SR))
-        evs.append(Event("distortion", kind, s0 / SR, e0 / SR, {**params, "scope": "segment", "n_segments": len(segs)}))
+        ps, pe = max(0, s0 - pad), min(len(x), e0 + pad)
+        src = x[ps:pe]
+        best = None
+        tries = 0
+        for k_try, kk in enumerate([kind] * cfg.dist_retries + ["codec_lowbitrate"]):
+            tries = k_try + 1
+            z, prm = DIST_FX[kk](src, rng)
+            # keep the active level unchanged, otherwise the splice creates an unlabelled loudness step
+            lvl = math.sqrt(active_speech_power(src) / max(active_speech_power(z), 1e-12))
+            z = (z * lvl).astype(np.float32)
+            sc = audibility_db(x[s0:e0], z[s0 - ps:e0 - ps])
+            if best is None or sc > best[0]:
+                best = (sc, z, {**prm, "level_match_db": 20 * math.log10(lvl)}, kk)
+            if sc >= cfg.dist_min_audibility:
+                break
+        sc, z, prm, kk = best
+        full = y.copy()
+        full[ps:pe] = z
+        y = splice(y, full, s0, e0, int(0.01 * SR))
+        evs.append(Event("distortion", kk, s0 / SR, e0 / SR,
+                         {**prm, "scope": "segment", "n_segments": len(segs), "audibility_db": sc,
+                          "tries": tries, "fallback": kk != kind}))
     return y, evs
+
+
+def _mel_fb(n_fft: int = 512, n_mels: int = 40) -> np.ndarray:
+    hz2m = lambda f: 2595 * np.log10(1 + f / 700)
+    m2hz = lambda q: 700 * (10 ** (q / 2595) - 1)
+    pts = m2hz(np.linspace(hz2m(50), hz2m(SR / 2), n_mels + 2))
+    bins = np.floor((n_fft + 1) * pts / SR).astype(int)
+    fb = np.zeros((n_mels, n_fft // 2 + 1))
+    for i in range(n_mels):
+        a, b, c = bins[i], bins[i + 1], max(bins[i + 2], bins[i + 1] + 1)
+        fb[i, a:b] = np.linspace(0, 1, b - a, endpoint=False)
+        fb[i, b:c] = np.linspace(1, 0, c - b, endpoint=False)
+    return fb
+
+
+_MEL = _mel_fb()
+
+
+def audibility_db(x: np.ndarray, y: np.ndarray) -> float:
+    """Objective proxy for how audible the change x -> y is (dB): the larger of
+      - log-mel distance: 40 mel bands, 32 ms frames / 8 ms hop, bands > 30 dB below the frame peak floored
+        (masked), mean |dB| over frames within 30 dB of the loudest frame;
+      - envelope distance: 5 ms log-energy, floored 40 dB below the peak, mean |dB| over active frames
+        (catches gaps, stutter and clicks that 32 ms spectra smear out)."""
+    if len(x) < 512:
+        return 0.0
+    _, _, X = signal.stft(x, SR, nperseg=512, noverlap=384)
+    _, _, Y = signal.stft(y, SR, nperseg=512, noverlap=384)
+    MX = 10 * np.log10(_MEL @ (np.abs(X) ** 2) + 1e-12)
+    MY = 10 * np.log10(_MEL @ (np.abs(Y) ** 2) + 1e-12)
+    top = MX.max(0, keepdims=True)
+    MX, MY = np.maximum(MX, top - 30), np.maximum(MY, top - 30)
+    e = MX.max(0)
+    act = e > e.max() - 30
+    mel_d = float(np.mean(np.abs(MX - MY)[:, act])) if act.any() else 0.0
+    n = int(0.005 * SR)
+    m = min(len(x), len(y)) // n
+    ex = 10 * np.log10(np.mean(x[: m * n].reshape(m, n) ** 2, 1) + 1e-12)
+    ey = 10 * np.log10(np.mean(y[: m * n].reshape(m, n) ** 2, 1) + 1e-12)
+    fl = ex.max() - 40
+    ex2, ey2 = np.maximum(ex, fl), np.maximum(ey, fl)
+    a2 = ex > ex.max() - 30
+    env_d = float(np.mean(np.abs(ex2 - ey2)[a2])) if a2.any() else 0.0
+    return round(max(mel_d, env_d), 2)
 
 
 # =============================================================================
@@ -795,9 +1068,33 @@ RECIPES = {  # name -> faults applied
     "noise+pause": ("noise", "unnatural_pause"),
     "distortion+pause": ("distortion", "unnatural_pause"),
     "all": ("noise", "distortion", "unnatural_pause"),
+    # v3.0 (round 2): long background layers, both labelled `noise`
+    "bgm": ("bgm",),
+    "noise_long": ("noise_long",),
+    "bgm+distortion": ("bgm", "distortion"),
+    "noise_long+distortion": ("noise_long", "distortion"),
+    # "bed" = background layer that is bgm with p = --p-bgm, otherwise noise_long (labelled `noise`)
+    "bed": ("bed",),
+    "bed+distortion": ("bed", "distortion"),
+    "bed+pause": ("bed", "unnatural_pause"),
+    "bed+distortion+pause": ("bed", "distortion", "unnatural_pause"),
 }
-DEFAULT_RECIPE_P = {"clean": 0.12, "noise": 0.20, "distortion": 0.18, "pause": 0.15,
-                    "noise+distortion": 0.10, "noise+pause": 0.10, "distortion+pause": 0.08, "all": 0.07}
+# round-2 fast-track mix (private-test survey): clean 25 / distortion 40 / BGM 15 / long noise 15 / pause 5
+ROUND1_CATEGORY_WEIGHTS = '{"fan": 3, "rain": 0.4, "traffic": 0.4, "motorbike": 0.4, "horn": 0.4, "street": 0.4}'
+# round 2: the private test also has LOW-LEVEL traffic in the background -> traffic back to weight 1
+# (its SNR range is 15-25 dB via --category-snr), fan no longer x3 (bank v2 adds ceiling_fan)
+ROUND1_CATEGORY_SNR = '{"street_vendor": [10, 20], "loudspeaker": [10, 20]}'
+ROUND2_CATEGORY_SNR = ('{"street_vendor": [10, 20], "loudspeaker": [10, 20], "electrical_hum": [0, 10], '
+                       '"traffic": [15, 25], "motorbike": [15, 25]}')
+ROUND2_CATEGORY_WEIGHTS = '{"fan": 1.5, "rain": 0.4, "horn": 0.4, "street": 0.4}'
+DEFAULT_RECIPE_P = {"clean": 0.25, "distortion": 0.40, "bgm": 0.15, "noise_long": 0.15, "pause": 0.05}
+# "review" mix: label co-occurrence measured on the team's 302-file listening review of the private test
+# (official labels; bgm_noise -> noise; reverb / swallow not labelled): none 28.1 %, distortion 28.5,
+# noise 17.5, pause 7.6, distortion+noise 9.3, distortion+pause 5.6, noise+pause 2.3, all three 1.0
+REVIEW_RECIPE_P = {"clean": 0.28, "distortion": 0.285, "bed": 0.175, "pause": 0.075, "bed+distortion": 0.095,
+                   "distortion+pause": 0.055, "bed+pause": 0.025, "bed+distortion+pause": 0.01}
+ROUND1_RECIPE_P = {"clean": 0.12, "noise": 0.20, "distortion": 0.18, "pause": 0.15,
+                   "noise+distortion": 0.10, "noise+pause": 0.10, "distortion+pause": 0.08, "all": 0.07}
 
 
 def _json_default(o):
@@ -821,18 +1118,43 @@ def cmd_generate(args) -> None:
     clean = [p for p in list_audio(clean_dir) if p.name not in reject]
     if args.limit:
         clean = clean[: args.limit]
+    if args.category_weights is None:
+        args.category_weights = (ROUND1_CATEGORY_WEIGHTS if args.recipe_set == "round1" else ROUND2_CATEGORY_WEIGHTS)
     args.category_weights = json.loads(args.category_weights or "{}")
-    bank = NoiseBank(Path(args.noise_dir), reject, args.category_weights)
-    print(f"[gen] clean={len(clean)} (rejected {len(reject)}), noise categories (files, P(draw)): "
-          f"{ {c: (len(bank.by_cat[c]), round(float(q), 2)) for c, q in zip(bank.cats, bank.cat_p)} }")
-
-    rp = dict(DEFAULT_RECIPE_P)
+    rp = dict({"round1": ROUND1_RECIPE_P, "review": REVIEW_RECIPE_P}.get(args.recipe_set, DEFAULT_RECIPE_P))
     if args.recipe_probs:
-        rp.update(json.loads(args.recipe_probs))
+        rp = json.loads(args.recipe_probs) if args.recipe_probs_replace else {**rp, **json.loads(args.recipe_probs)}
+    rp = {k: v for k, v in rp.items() if v > 0}
+    unknown = set(rp) - set(RECIPES)
+    if unknown:
+        raise SystemExit(f"unknown recipes {sorted(unknown)}; known: {sorted(RECIPES)}")
+    used = {f for k in rp for f in RECIPES[k]}
+    noise_dirs = args.noise_dir
+    bank = NoiseBank(noise_dirs, reject, args.category_weights, music=False,
+                     required=bool(used & {"noise", "noise_long", "bed"}), only=args.noise_categories)
+    music = NoiseBank(noise_dirs, reject, args.category_weights, music=True, required=bool(used & {"bgm", "bed"}))
+    print(f"[gen] clean={len(clean)} (rejected {len(reject)}), noise categories (files, P(draw)): "
+          f"{ {c: (len(bank.by_cat[c]), round(float(q), 2)) for c, q in zip(bank.cats, bank.cat_p)} }; "
+          f"music: { {c: len(music.by_cat[c]) for c in music.cats} }")
     names = list(rp)
     probs = np.array([rp[k] for k in names], dtype=float)
     probs /= probs.sum()
+    # EXACT quotas (largest remainder) for the first variant of every clean file, shuffled with the seed:
+    # with 125 test files, independent draws would miss 25 % clean by +-5 files.
+    quota = None
+    if args.exact_ratios:
+        n_tot = len(clean)
+        raw = probs * n_tot
+        cnt = np.floor(raw).astype(int)
+        for i in np.argsort(-(raw - cnt))[: n_tot - cnt.sum()]:
+            cnt[i] += 1
+        quota = [nm for nm, c in zip(names, cnt) for _ in range(c)]
+        np.random.default_rng(args.seed).shuffle(quota)
+        print(f"[gen] exact recipe quotas: {dict(zip(names, cnt.tolist()))}")
     args.dist_weights = json.loads(args.dist_weights) if args.dist_weights else {}
+    args.category_pieces = {k: tuple(v) for k, v in json.loads(args.category_pieces or "{}").items()}
+    if args.category_snr is None:
+        args.category_snr = ROUND1_CATEGORY_SNR if args.recipe_set == "round1" else ROUND2_CATEGORY_SNR
     args.category_snr = {k: tuple(v) for k, v in json.loads(args.category_snr or "{}").items()}
 
     wav_dir = out / "wav"
@@ -857,6 +1179,8 @@ def cmd_generate(args) -> None:
             seed = int(hashlib.sha1(f"{args.seed}|{cp.name}|{v}".encode()).hexdigest()[:8], 16)
             rng = np.random.default_rng(seed)
             recipe = names[rng.choice(len(names), p=probs)]
+            if quota is not None and v == 0:
+                recipe = quota[ci]
             if recipe == "clean" and has_clean_copy:
                 # at most ONE no-fault copy per clean utterance: with several variants, a second clean
                 # copy would be a near-duplicate (only the gain differs) -> draw a faulty recipe instead
@@ -873,11 +1197,22 @@ def cmd_generate(args) -> None:
             if use_reverb:                      # room stage, replaces the channel distortion
                 x, ev = apply_reverb(x, rng)
                 events += ev
+            x_pre_noise = x            # speech (+ pauses) before any background: distortion is anchored on it
             if "noise" in faults:
                 x, ev = apply_noise(x, rng, bank, args, events)   # may shift earlier events (insert mode)
                 events += ev
+            if "bed" in faults:        # background runs on through inserted pauses (both labels, as heard)
+                bed_kind = "bgm" if rng.random() < args.p_bgm else "long"
+                x, ev = apply_bed(x, rng, music if bed_kind == "bgm" else bank, args, bed_kind)
+                events += ev
+            if "bgm" in faults:
+                x, ev = apply_bed(x, rng, music, args, "bgm")
+                events += ev
+            if "noise_long" in faults:
+                x, ev = apply_bed(x, rng, bank, args, "long")
+                events += ev
             if "distortion" in faults and not use_reverb:
-                x, ev = apply_distortion(x, rng, args)
+                x, ev = apply_distortion(x, rng, args, ref=x_pre_noise)
                 events += ev
             # random presentation level so absolute loudness is not a shortcut for "clean";
             # reduced if it would push the peak over 0.99 (never re-clips)
@@ -893,7 +1228,7 @@ def cmd_generate(args) -> None:
             rms_dbfs = 20 * math.log10(float(np.sqrt(np.mean(x ** 2))) + 1e-12)
             peak_dbfs = 20 * math.log10(float(np.max(np.abs(x))) + 1e-12)
             dur = len(x) / SR
-            fid = f"vi_aug_{k:06d}.wav"
+            fid = f"{args.id_prefix}_{k:06d}.wav"
             write_wav_pcm16(wav_dir / fid, x)
             k += 1
             fl = {f: serialize(normalize_intervals([[e.start, e.end] for e in events if e.fault == f], dur), dur)
@@ -914,7 +1249,7 @@ def cmd_generate(args) -> None:
             ps = [e for e in events if e.fault == "unnatural_pause"]
             meta_rows.append({
                 "file_id": fid, "source_clean": cp.name, "source_group_id": cp.stem,
-                "source_type": "vi_aug", "split": "train", "duration": round(dur, 3),
+                "source_type": args.id_prefix, "split": args.split, "duration": round(dur, 3),
                 "n_frames": math.ceil(dur / HOP), "recipe": recipe,
                 "has_noise": int(bool(fl["noise"])), "has_distortion": int(bool(fl["distortion"])),
                 "has_unnatural_pause": int(bool(fl["unnatural_pause"])),
@@ -923,9 +1258,11 @@ def cmd_generate(args) -> None:
                 "noise_snr_db": round(nz[0].params["snr_db"], 2) if nz else "",
                 "noise_category": nz[0].params["category"] if nz else "",
                 "noise_mode": nz[0].kind if nz else "",
+                "noise_file": nz[0].params.get("noise_file", "") if nz else "",
+                "noise_coverage": nz[0].params.get("coverage", "") if nz else "",
                 "noise_n_segments": nz[0].params["n_segments"] if nz else "",
                 "noise_cover_s": round(sum(e.end - e.start for e in nz), 3),
-                "distortion_kind": "|".join(e.kind for e in ds),
+                "distortion_kind": ds[0].kind if ds else "", "n_dist_segments": len(ds),
                 "n_pauses": len(ps), "pause_total_s": round(sum(e.end - e.start for e in ps), 3),
                 "seed": seed,
             })
@@ -970,6 +1307,8 @@ def write_report(out: Path, rows: list[dict], args) -> None:
         cov = np.array([r["noise_cover_s"] / r["duration"] for r in nzr])
         lines += ["", "## Noise bursts", "",
                   "- mode: " + ", ".join(f"{k} {v}" for k, v in Counter(r["noise_mode"] for r in nzr).most_common()),
+                  "- coverage (bgm / long noise): " + ", ".join(f"{k} {v}" for k, v in
+                                                               Counter(r["noise_coverage"] for r in nzr if r["noise_coverage"]).most_common()),
                   "- bursts per file: " + ", ".join(f"{k}: {v}" for k, v in sorted(Counter(r["noise_n_segments"] for r in nzr).items())),
                   f"- labelled coverage of the file: mean {cov.mean():.0%}, max {cov.max():.0%}",
                   f"- SNR dB: min {snr.min():.1f} / median {np.median(snr):.1f} / max {snr.max():.1f}",
@@ -995,13 +1334,14 @@ def main() -> None:
 
     a = sub.add_parser("audit", help="automatic gatekeeping checks")
     a.add_argument("--clean-dir", default="data/vietnamese_audio_clean")
-    a.add_argument("--noise-dir", default="data/noise_bank/vietnamese_noise_bank")
+    a.add_argument("--noise-dir", default="data/vietnamese_noise_bank_v2")
     a.add_argument("--report-dir", default="reports")
     a.set_defaults(func=cmd_audit)
 
     g = sub.add_parser("generate", help="build the degraded set")
     g.add_argument("--clean-dir", default="data/vietnamese_audio_clean")
-    g.add_argument("--noise-dir", default="data/noise_bank/vietnamese_noise_bank")
+    g.add_argument("--noise-dir", nargs="+", default=["data/vietnamese_noise_bank_v2"],
+                   help="one or more folders; bgm_*.wav = music (recipe bgm), all other files = noise")
     g.add_argument("--out-dir", default="data/vietnamese_aug")
     g.add_argument("--reject-list", default=None, help="txt with file names rejected at gatekeeping")
     g.add_argument("--variants-per-clean", type=int, default=1)
@@ -1012,11 +1352,39 @@ def main() -> None:
                    help="random output gain U(-x, +x) dB (0 = every file at the same speech level)")
     g.add_argument("--noise-audible-snr", type=float, default=30.0,
                    help="noise frames quieter than speech level minus this (dB) are not labelled")
+    g.add_argument("--recipe-set", choices=["round2", "review", "round1"], default="round2",
+                   help="round2 = clean .25 / distortion .40 / bgm .15 / noise_long .15 / pause .05 (one fault per file); "
+                        "review = label co-occurrence of the 302-file private-test review (26 %% of faulty files "
+                        "have 2-3 faults); round1 = v2.7 mix")
+    g.add_argument("--p-bgm", type=float, default=0.33,
+                   help="recipe 'bed': P(background is music); review: 30 of 91 noise files had BGM")
     g.add_argument("--recipe-probs", default=None, help='JSON override, e.g. \'{"clean":0.2}\'')
+    g.add_argument("--recipe-probs-replace", action="store_true", help="--recipe-probs replaces the set instead of updating it")
+    g.add_argument("--no-exact-ratios", dest="exact_ratios", action="store_false",
+                   help="draw recipes independently instead of exact shuffled quotas")
+    g.add_argument("--id-prefix", default="vi_aug", help="output names <prefix>_XXXXXX.wav (test: vi_test_v1)")
+    g.add_argument("--split", default="train", help="value of the split column in metadata.csv")
+    g.add_argument("--bed-p-full", type=float, default=0.30, help="bgm / long noise: P(covers the whole file)")
+    g.add_argument("--bed-p-long", type=float, default=0.20, help="P(one stretch of 60-90 %% of the file)")
+    g.add_argument("--bed-cover-min", type=float, default=0.6, help="'long' coverage: min fraction of the file")
+    g.add_argument("--bed-cover-max", type=float, default=0.9)
+    g.add_argument("--bed-seg-count-min", type=int, default=1, help="'partial' coverage: pieces per file")
+    g.add_argument("--bed-seg-count-max", type=int, default=3)
+    g.add_argument("--bed-seg-min", type=float, default=0.5, help="'partial' piece length (s)")
+    g.add_argument("--bed-seg-max", type=float, default=4.0)
+    g.add_argument("--bed-partial-max-cover", type=float, default=0.6)
+    g.add_argument("--category-pieces", default='{"keyboard": [1, 2, 0.4, 0.6]}',
+                   help="JSON {category: [count_min, count_max, len_min_s, len_max_s]}: short-event categories that "
+                        "are always 'partial' with these piece counts / lengths (default keyboard 1-2 x 0.4-0.6 s)")
+    g.add_argument("--bgm-snr-min", type=float, default=5.0)
+    g.add_argument("--bgm-snr-max", type=float, default=20.0)
+    g.add_argument("--bed-snr-min", type=float, default=3.0, help="long noise SNR range (dB, active levels)")
+    g.add_argument("--bed-snr-max", type=float, default=20.0)
     g.add_argument("--snr-min", type=float, default=0.0)
     g.add_argument("--snr-max", type=float, default=15.0)
-    g.add_argument("--category-snr", default='{"street_vendor": [10, 20], "loudspeaker": [10, 20]}',
-                   help="JSON {category: [snr_min, snr_max]} overriding --snr-min/--snr-max for speech-like noise")
+    g.add_argument("--category-snr", default=None,
+                   help="JSON {category: [snr_min, snr_max]} overriding the default SNR range. Default: loudspeaker / "
+                        "street_vendor 10-20; round2 also electrical_hum 0-10, traffic / motorbike 15-25 (low background)")
     g.add_argument("--distant-categories", nargs="*", default=["street_vendor", "loudspeaker"],
                    help="categories that get low-pass + reverb so they sound far away (empty to disable)")
     g.add_argument("--p-noise-insert", type=float, default=0.25,
@@ -1027,15 +1395,20 @@ def main() -> None:
     g.add_argument("--noise-seg-min", type=float, default=0.3, help="burst length (s)")
     g.add_argument("--noise-seg-max", type=float, default=1.5)
     g.add_argument("--noise-max-cover", type=float, default=0.5, help="max fraction of the file covered by noise")
-    g.add_argument("--dist-kinds", nargs="+", default=["narrowband", "clipping", "codec_lowbitrate", "packet_loss"],
+    g.add_argument("--dist-kinds", nargs="+", default=["crackle", "clipping", "codec_lowbitrate", "narrowband", "packet_loss"],
                    choices=list(DIST_FX))
     g.add_argument("--dist-weights",
-                   default='{"narrowband":0.3,"clipping":0.3,"codec_lowbitrate":0.25,"packet_loss":0.15}')
+                   default='{"crackle":0.30,"clipping":0.20,"codec_lowbitrate":0.20,"narrowband":0.15,"packet_loss":0.15}')
+    g.add_argument("--dist-min-audibility", type=float, default=4.0,
+                   help="audibility gate (dB) every distorted segment must pass, see audibility_db()")
+    g.add_argument("--dist-retries", type=int, default=4, help="fresh draws of the kind before the codec fallback")
+    g.add_argument("--dist-min-active", type=float, default=0.6,
+                   help="min fraction of speech (active) frames in a distorted segment")
     g.add_argument("--p-dist-full", type=float, default=0.0,
                    help="P(distortion covers the whole file); default 0 = only short segments")
     g.add_argument("--dist-seg-count-min", type=int, default=1, help="distorted segments per file")
-    g.add_argument("--dist-seg-count-max", type=int, default=2)
-    g.add_argument("--dist-seg-min", type=float, default=0.4, help="segment length (s)")
+    g.add_argument("--dist-seg-count-max", type=int, default=3)
+    g.add_argument("--dist-seg-min", type=float, default=0.5, help="segment length (s)")
     g.add_argument("--dist-seg-max", type=float, default=1.5)
     g.add_argument("--dist-max-cover", type=float, default=0.5, help="max fraction of the file distorted")
     g.add_argument("--pause-min", type=float, default=0.4, help="length of each inserted stop (s)")
@@ -1044,9 +1417,13 @@ def main() -> None:
     g.add_argument("--pause-count-max", type=int, default=2)
     g.add_argument("--p-dropout", type=float, default=0.0,
                    help="P(pause event mutes a stretch of speech instead); 0 = never mute syllables")
-    g.add_argument("--category-weights",
-                   default='{"fan": 3, "rain": 0.4, "traffic": 0.4, "motorbike": 0.4, "horn": 0.4, "street": 0.4}',
-                   help="JSON {category_prefix: weight} for how often each noise category is drawn (default 1)")
+    g.add_argument("--category-weights", default=None,
+                   help="JSON {category_prefix: weight} for how often each noise category is drawn (default 1). "
+                        "Default: round1 fan 3 / rain, traffic, motorbike, horn, street 0.4; "
+                        "round2 fan 1.5 / rain, horn, street 0.4 (traffic 1)")
+    g.add_argument("--noise-categories", nargs="*", default=None,
+                   help="only use these noise categories (prefix match), e.g. for the test set: "
+                        "ceiling_fan cicada electrical_hum keyboard traffic")
     g.add_argument("--reverb", action="store_true", help="enable synthetic-RIR reverb, labelled distortion")
     g.add_argument("--p-reverb", type=float, default=0.15)
     g.set_defaults(func=cmd_generate)
