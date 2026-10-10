@@ -64,9 +64,7 @@ import numpy as np
 import pandas as pd
 
 
-# ============================================================================
 # Configuration
-# ============================================================================
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CSV = ROOT / "data" / "qualispeech" / "train.csv"
@@ -177,9 +175,7 @@ EXPECTED_SOURCE_COUNTS = {
 }
 
 
-# ============================================================================
 # Utilities
-# ============================================================================
 
 
 def parse_args() -> argparse.Namespace:
@@ -317,9 +313,7 @@ def add_status(statuses: list[dict], level: str, item: str, detail: str) -> None
     statuses.append({"level": level, "item": item, "detail": detail})
 
 
-# ============================================================================
 # Split implementations
-# ============================================================================
 
 
 def group_disjoint_split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -467,9 +461,7 @@ def summarize_split(
     }
 
 
-# ============================================================================
 # Audits
-# ============================================================================
 
 
 def audit_schema(df: pd.DataFrame) -> dict:
@@ -713,9 +705,7 @@ def classify_fault_annotation(fault_type: str, value: object) -> str:
 
 
 
-# ---------------------------------------------------------------------------
 # Strict initial Unnatural Pause categorization for pipeline handoff.
-# ---------------------------------------------------------------------------
 
 STRICT_UNNATURAL_TOTALS = {
     "no_fault": 5907,
@@ -904,9 +894,7 @@ def audit_cross_split_metadata(duplicates: dict) -> dict:
     }
 
 
-# ============================================================================
 # Optional audio audit
-# ============================================================================
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -1017,9 +1005,7 @@ def audit_audio_inventory(
     }
 
 
-# ============================================================================
 # Findings / report
-# ============================================================================
 
 
 def build_findings(
@@ -1480,9 +1466,7 @@ def build_report(
     return "\n".join(lines)
 
 
-# ============================================================================
 # Main
-# ============================================================================
 
 
 def main() -> int:

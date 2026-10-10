@@ -174,7 +174,6 @@ def main():
     print(f"Loss:        {args.w_mse}*MSE + {args.w_ccc}*(1-CCC) + {args.w_pcc}*(1-PCC)")
     print()
 
-    # Load CSV splits
     train_df = pd.read_csv(train_csv_path)
     val_df = pd.read_csv(val_csv_path)
     test_df = pd.read_csv(test_csv_path) if test_csv_path and test_csv_path.exists() else None
@@ -336,7 +335,6 @@ def main():
             )
             print(f"  -> NEW BEST CHECKPOINT (epoch={epoch}, VAL PCC={best_val_pcc:.4f})")
 
-    # Save training history
     history_df = pd.DataFrame(history)
     history_df.to_csv(out_dir / "training_history.csv", index=False)
 
@@ -379,7 +377,6 @@ def main():
         print(f"TEST CCC: {final_test['ccc']:.6f}")
         print(f"TEST PCC: {final_test['pcc']:.6f}")
 
-        # Save test predictions
         test_pred_df = pd.DataFrame({
             "id": [f"{fid}.wav" for fid in final_test["file_ids"]],
             "ground_truth": final_test["targets"],

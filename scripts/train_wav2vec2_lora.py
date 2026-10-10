@@ -27,9 +27,7 @@ from transformers import AutoFeatureExtractor, Wav2Vec2Model
 from peft import LoraConfig, get_peft_model, get_peft_model_state_dict, set_peft_model_state_dict
 
 
-# ======================================================================
 # PROJECT PATH
-# ======================================================================
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -50,9 +48,7 @@ from src.sqa.model import (
 )
 
 
-# ======================================================================
 # PATHS
-# ======================================================================
 
 CSV_PATH = ROOT / "data" / "qualispeech" / "train.csv"
 WAV_DIR = ROOT / "data" / "qualispeech" / "wav"
@@ -63,9 +59,7 @@ CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 BEST_CHECKPOINT = CHECKPOINT_DIR / "wav2vec2_lora_full_best.pt"  # overridden in main() from --model-name
 
 
-# ======================================================================
 # CONFIG
-# ======================================================================
 
 SEED = 42
 
@@ -104,9 +98,7 @@ DEVICE = torch.device(
 )
 
 
-# ======================================================================
 # SEED
-# ======================================================================
 
 def set_seed(seed: int) -> None:
     random.seed(seed)
@@ -116,9 +108,7 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-# ======================================================================
 # GROUP & SOURCE BALANCED SPLIT (MATCHES BASELINES)
-# ======================================================================
 
 def get_group(sample_id: str) -> str:
     sample_id = str(sample_id).strip()
@@ -204,9 +194,7 @@ def make_source_balanced_split(df: pd.DataFrame):
     return train_df, val_df
 
 
-# ======================================================================
 # INPUT PREPROCESSING (wav2vec2-specific)
-# ======================================================================
 
 # Filled in main() from the checkpoint's preprocessor_config.json.
 INPUT_CFG = {"do_normalize": True, "pass_mask": False}
@@ -244,9 +232,7 @@ def prepare_inputs(wav: torch.Tensor, attention_mask: torch.Tensor):
     return wav, mask_arg
 
 
-# ======================================================================
 # FRAME MASK
-# ======================================================================
 
 def make_frame_valid_mask(
     backbone,
@@ -266,9 +252,7 @@ def make_frame_valid_mask(
     return frame_idx < frame_lengths.unsqueeze(1)
 
 
-# ======================================================================
 # FORWARD
-# ======================================================================
 
 def forward_batch(
     backbone,
@@ -293,9 +277,7 @@ def forward_batch(
     return pred
 
 
-# ======================================================================
 # EVALUATION
-# ======================================================================
 
 @torch.no_grad()
 def evaluate(
@@ -334,9 +316,7 @@ def evaluate(
     }
 
 
-# ======================================================================
 # TRAINING ONE EPOCH WITH MICRO-BATCH PREDICTION ACCUMULATION
-# ======================================================================
 
 def train_one_epoch(
     backbone,
@@ -438,9 +418,7 @@ def train_one_epoch(
     return running_loss / max(num_updates, 1), global_step
 
 
-# ======================================================================
 # MAIN
-# ======================================================================
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -483,9 +461,7 @@ def main():
     print("AMP:                    ", USE_AMP)
     print("Gradient checkpointing: ", USE_GRADIENT_CHECKPOINTING)
 
-    # ------------------------------------------------------------------
     # DATA PREPARATION (SOURCE-BALANCED)
-    # ------------------------------------------------------------------
     df = pd.read_csv(CSV_PATH)
     df["sample_id"] = (
         df["id"].astype(str).str.strip().str.replace(r"\.wav$", "", regex=True)
@@ -534,9 +510,7 @@ def main():
     print(f"Train samples: {len(train_dataset)}, Batches: {len(train_loader)}")
     print(f"Val samples:   {len(val_dataset)}, Batches: {len(val_loader)}")
 
-    # ------------------------------------------------------------------
     # BACKBONE & LORA
-    # ------------------------------------------------------------------
     # CTC-fine-tuned checkpoints (e.g. *-960h) also load: lm_head is dropped.
     backbone = Wav2Vec2Model.from_pretrained(resolve_model(MODEL_NAME)).to(DEVICE)
     if hasattr(backbone.config, "layerdrop"):
@@ -579,9 +553,7 @@ def main():
             except TypeError:
                 backbone.gradient_checkpointing_enable()
 
-    # ------------------------------------------------------------------
     # QUALITY HEAD & OPTIMIZER
-    # ------------------------------------------------------------------
     hidden_size = backbone.config.hidden_size
     quality_head = QualityHead(
         hidden_size=hidden_size,
@@ -611,9 +583,7 @@ def main():
         enabled=(USE_AMP and DEVICE.type == "cuda"),
     )
 
-    # ------------------------------------------------------------------
     # INITIAL VALIDATION
-    # ------------------------------------------------------------------
     print()
     print("INITIAL VALIDATION (EPOCH 0)")
     initial = evaluate(backbone, quality_head, val_loader)
@@ -683,9 +653,7 @@ def main():
             )
             print(f"  -> NEW BEST CHECKPOINT (epoch={epoch}, VAL PCC={best_val_pcc:.6f})")
 
-    # ------------------------------------------------------------------
     # RESTORE BEST CHECKPOINT
-    # ------------------------------------------------------------------
     print()
     print("=" * 70)
     print("RESTORE BEST CHECKPOINT")

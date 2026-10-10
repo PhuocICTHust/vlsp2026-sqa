@@ -18,7 +18,6 @@ def main():
     if not json_path.exists():
         raise FileNotFoundError(f"File not found: {json_path}")
 
-    # Validate JSON before packaging
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     print(f"Validated JSON: {len(data)} entries found in {json_path.name}")
@@ -29,7 +28,6 @@ def main():
     zip_path = out_dir / zip_name
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Include submission.json at the root of the zip archive
         zf.write(json_path, arcname="submission.json")
 
     print(f"Successfully packaged: {zip_path.resolve()} ({zip_path.stat().st_size / 1024:.2f} KB)")

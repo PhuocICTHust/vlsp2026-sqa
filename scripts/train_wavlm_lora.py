@@ -17,9 +17,7 @@ from torch.utils.data import DataLoader, Subset
 from transformers import WavLMModel
 
 
-# ======================================================================
 # PROJECT PATH
-# ======================================================================
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -42,9 +40,7 @@ from src.sqa.model import (
 )
 
 
-# ======================================================================
 # PATHS
-# ======================================================================
 
 CSV_PATH = ROOT / "data" / "qualispeech" / "train.csv"
 WAV_DIR = ROOT / "data" / "qualispeech" / "wav"
@@ -55,9 +51,7 @@ CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 BEST_CHECKPOINT = CHECKPOINT_DIR / "wavlm_manual_lora_full_best.pt"
 
 
-# ======================================================================
 # CONFIG
-# ======================================================================
 
 SEED = 42
 
@@ -104,9 +98,7 @@ DEVICE = torch.device(
 )
 
 
-# ======================================================================
 # SEED
-# ======================================================================
 
 def set_seed(seed: int) -> None:
     random.seed(seed)
@@ -116,9 +108,7 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-# ======================================================================
 # SOURCE-BALANCED SPLIT (MATCHES BASELINES)
-# ======================================================================
 
 def get_group(sample_id: str) -> str:
     sample_id = str(sample_id).strip()
@@ -204,9 +194,7 @@ def make_source_balanced_split(df: pd.DataFrame, val_ratio: float = VAL_RATIO):
     return train_df, val_df
 
 
-# ======================================================================
 # DISABLE LAYERDROP
-# ======================================================================
 
 def disable_layerdrop(backbone) -> None:
     if hasattr(backbone.config, "layerdrop"):
@@ -219,9 +207,7 @@ def disable_layerdrop(backbone) -> None:
     print("LayerDrop: disabled")
 
 
-# ======================================================================
 # MANUAL LoRA
-# ======================================================================
 
 class ManualLoRA(nn.Module):
     """
@@ -254,9 +240,7 @@ class ManualLoRA(nn.Module):
         return self.scaling * (self.lora_B @ self.lora_A)
 
 
-# ======================================================================
 # ATTACH MANUAL LoRA
-# ======================================================================
 
 def attach_manual_lora(backbone, r: int = LORA_R, alpha: float = LORA_ALPHA):
     layers = backbone.encoder.layers
@@ -320,9 +304,7 @@ def attach_manual_lora(backbone, r: int = LORA_R, alpha: float = LORA_ALPHA):
     return target_names
 
 
-# ======================================================================
 # PATCHED WAVLM ATTENTION
-# ======================================================================
 
 def manual_lora_attention_forward(
     self,
@@ -395,9 +377,7 @@ def freeze_backbone(backbone) -> None:
     print("All WavLM base parameters frozen.")
 
 
-# ======================================================================
 # STATE DICT HELPERS (LIGHTWEIGHT CHECKPOINTS)
-# ======================================================================
 
 def extract_lora_state_dict(backbone) -> dict[str, torch.Tensor]:
     """Extract only the manual LoRA parameters (~3 MB instead of 1.27 GB)."""
@@ -418,9 +398,7 @@ def load_lora_state_dict(backbone, lora_dict: dict[str, torch.Tensor]) -> None:
             raise KeyError(f"Parameter {name} not found in backbone.")
 
 
-# ======================================================================
 # FRAME MASK & FORWARD
-# ======================================================================
 
 def make_frame_valid_mask(
     backbone,
@@ -461,9 +439,7 @@ def forward_batch(backbone, quality_head, batch, normalize_wav: bool = True):
     return pred
 
 
-# ======================================================================
 # EVALUATION
-# ======================================================================
 
 @torch.no_grad()
 def evaluate(
@@ -512,9 +488,7 @@ def evaluate(
     }
 
 
-# ======================================================================
 # TRAINING ONE EPOCH WITH MICRO-BATCH PREDICTION ACCUMULATION
-# ======================================================================
 
 def train_one_epoch(
     backbone,
@@ -640,9 +614,7 @@ def train_one_epoch(
     return running_loss / max(num_updates, 1), global_step
 
 
-# ======================================================================
 # MAIN
-# ======================================================================
 
 def main():
     parser = argparse.ArgumentParser(description="WavLM LoRA Full Data Training")
@@ -710,9 +682,7 @@ def main():
     print("AMP:                    ", USE_AMP)
     print("Gradient checkpointing: ", USE_GRADIENT_CHECKPOINTING)
 
-    # ------------------------------------------------------------------
     # DATA PREPARATION (SOURCE-BALANCED)
-    # ------------------------------------------------------------------
     test_loader = None
     if args.train_csv and args.val_csv:
         train_path = Path(args.train_csv)
@@ -788,9 +758,6 @@ def main():
     if test_loader is not None:
         print(f"Test samples:  {len(test_loader.dataset)}, Batches: {len(test_loader)}")
 
-    # ------------------------------------------------------------------
-    # LOAD WAVLM & ATTACH MANUAL LoRA
-    # ------------------------------------------------------------------
     print()
     print("=" * 70)
     print("LOAD WAVLM-LARGE")
@@ -808,9 +775,7 @@ def main():
             backbone.gradient_checkpointing_enable()
             print("Gradient checkpointing: enabled")
 
-    # ------------------------------------------------------------------
     # QUALITY HEAD & OPTIMIZER
-    # ------------------------------------------------------------------
     hidden_size = backbone.config.hidden_size
     if args.quality_head_type == "utmos_nisqa":
         quality_head = UtmosNisqaQualityHead(
@@ -853,9 +818,7 @@ def main():
         enabled=(USE_AMP and DEVICE.type == "cuda"),
     )
 
-    # ------------------------------------------------------------------
     # INITIAL VALIDATION
-    # ------------------------------------------------------------------
     print()
     print("INITIAL VALIDATION (EPOCH 0)")
     initial = evaluate(
@@ -934,7 +897,6 @@ def main():
             best_val_pcc = val_result["pcc"]
             best_epoch = epoch
 
-            # Save lightweight checkpoint (~4 MB instead of 1.27 GB)
             torch.save(
                 {
                     "epoch": epoch,
@@ -967,9 +929,7 @@ def main():
             )
             print(f"  -> NEW BEST CHECKPOINT (epoch={epoch}, VAL PCC={best_val_pcc:.6f})")
 
-    # ------------------------------------------------------------------
     # RESTORE BEST CHECKPOINT
-    # ------------------------------------------------------------------
     print()
     print("=" * 70)
     print("RESTORE BEST CHECKPOINT")

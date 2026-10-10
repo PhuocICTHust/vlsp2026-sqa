@@ -88,7 +88,6 @@ def main():
     df = pd.read_csv(csv_path)
     print(f"Total entries in CSV: {len(df):,}")
 
-    # Filter out already cached samples
     pending_df = df.copy()
     pending_df["sample_id"] = pending_df["id"].astype(str).str.strip().str.replace(r"\.wav$", "", regex=True)
     existing = set(p.stem for p in cache_dir.glob("*.pt"))
@@ -101,7 +100,6 @@ def main():
         print("All samples are already cached! Done.")
         return
 
-    # Load Backbone
     print("\nLoading HuBERT backbone...")
     backbone = HubertModel.from_pretrained(args.model_name).to(device)
     backbone.eval()
@@ -136,7 +134,6 @@ def main():
                 hidden = backbone(input_values=wav, attention_mask=attention_mask).last_hidden_state
                 valid_mask = make_frame_valid_mask(backbone, attention_mask, hidden.shape[1])
 
-            # Save individual files
             for i, fid in enumerate(fids):
                 clean_fid = Path(fid).stem
                 sample_valid = valid_mask[i]

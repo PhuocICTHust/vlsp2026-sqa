@@ -62,7 +62,6 @@ class DecoupledFaultHead(nn.Module):
         self.input_dim = input_dim
         self.in_norm = nn.LayerNorm(input_dim)
 
-        # 1. Distortion branch (short receptive field)
         self.dist_proj = nn.Linear(input_dim, branch_dim)
         self.dist_blocks = nn.ModuleList([
             _ConvBlock(branch_dim, kernel_size=3, dilation=1),
@@ -70,7 +69,6 @@ class DecoupledFaultHead(nn.Module):
         ])
         self.dist_out = nn.Linear(branch_dim, 1)
 
-        # 2. Noise branch (dilated conv)
         self.noise_proj = nn.Linear(input_dim, branch_dim)
         self.noise_blocks = nn.ModuleList([
             _ConvBlock(branch_dim, kernel_size=7, dilation=1),
@@ -79,7 +77,6 @@ class DecoupledFaultHead(nn.Module):
         ])
         self.noise_out = nn.Linear(branch_dim, 1)
 
-        # 3. Pause branch (BiLSTM)
         self.pause_proj = nn.Linear(input_dim, branch_dim)
         self.pause_lstm = nn.LSTM(branch_dim, 64, batch_first=True, bidirectional=True)
         self.pause_out = nn.Linear(128, 1)
@@ -94,24 +91,20 @@ class DecoupledFaultHead(nn.Module):
 
         h_norm = self.in_norm(h) * mask_f
 
-        # Branch 1: Distortion (index 1 trong FAULT_TYPES)
         xd = self.dist_proj(h_norm) * mask_f
         for blk in self.dist_blocks:
             xd = blk(xd, mask_f)
         logit_dist = self.dist_out(xd)
 
-        # Branch 2: Noise (index 0 trong FAULT_TYPES)
         xn = self.noise_proj(h_norm) * mask_f
         for blk in self.noise_blocks:
             xn = blk(xn, mask_f)
         logit_noise = self.noise_out(xn)
 
-        # Branch 3: Pause (index 2 trong FAULT_TYPES)
         xp = self.pause_proj(h_norm) * mask_f
         lstm_out, _ = self.pause_lstm(xp)
         logit_pause = self.pause_out(lstm_out * mask_f)
 
-        # FAULT_TYPES = ("noise", "distortion", "unnatural_pause")
         logits = torch.cat([logit_noise, logit_dist, logit_pause], dim=-1)
         return logits.masked_fill(~mask.unsqueeze(-1), -30.0)
 
@@ -121,7 +114,6 @@ def main():
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
-    # Load 2,000 train items
     old_items = []
     with open(OLD_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
@@ -143,7 +135,6 @@ def main():
     all_train = old_items + new_items
     print(f"Train samples: {len(all_train)} files.")
 
-    # Load test items
     test_items = []
     with open(TEST_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
@@ -188,7 +179,6 @@ def main():
         scheduler.step()
         train_loss /= len(train_loader)
 
-        # Eval
         model.eval()
         preds = []
         gts = []

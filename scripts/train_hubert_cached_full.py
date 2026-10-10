@@ -4,9 +4,7 @@ import sys
 import random
 from pathlib import Path
 
-# ============================================================
 # PROJECT ROOT
-# ============================================================
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -21,23 +19,17 @@ from torch.nn.utils.rnn import pad_sequence
 from src.sqa.model import QualityHead, quality_loss
 
 
-# ============================================================
 # CONFIG
-# ============================================================
 
 CSV_PATH = ROOT / "data" / "qualispeech" / "train.csv"
 
-# ------------------------------------------------------------
 # IMPORTANT:
 # HuBERT cache is completely separate from WavLM cache.
-# ------------------------------------------------------------
 
 CACHE_DIR = ROOT / "data" / "qualispeech" / "hubert_cache"
 
-# ------------------------------------------------------------
 # IMPORTANT:
 # Separate output directory so WavLM results are NOT overwritten.
-# ------------------------------------------------------------
 
 OUT_DIR = ROOT / "outputs" / "hubert_cached_full"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -58,17 +50,13 @@ PIN_MEMORY = True
 
 EXPECTED_SAMPLES = 10558
 
-# ============================================================
 # HuBERT-base hidden size
 # facebook/hubert-base-ls960 -> 768
-# ============================================================
 
 HIDDEN_SIZE = 768
 
 
-# ============================================================
 # REPRODUCIBILITY
-# ============================================================
 
 def seed_everything(seed: int = 42):
 
@@ -83,9 +71,7 @@ def seed_everything(seed: int = 42):
     torch.backends.cudnn.benchmark = False
 
 
-# ============================================================
 # GROUP
-# ============================================================
 
 def get_group(sample_id: str) -> str:
 
@@ -106,9 +92,7 @@ def get_group(sample_id: str) -> str:
     return group
 
 
-# ============================================================
 # SOURCE
-# ============================================================
 
 def get_source(group: str):
     """
@@ -151,9 +135,7 @@ def get_source(group: str):
     return "bvcc"
 
 
-# ============================================================
 # CACHE DISCOVERY
-# ============================================================
 
 def discover_cache_ids(cache_dir: Path) -> set[str]:
 
@@ -177,9 +159,7 @@ def discover_cache_ids(cache_dir: Path) -> set[str]:
     return ids
 
 
-# ============================================================
 # CSV <-> CACHE AUDIT
-# ============================================================
 
 def audit_csv_and_cache(
     df: pd.DataFrame,
@@ -260,9 +240,7 @@ def audit_csv_and_cache(
     print("CSV <-> CACHE: PASS")
 
 
-# ============================================================
 # DATASET
-# ============================================================
 
 class CachedQualiSpeechDataset(Dataset):
 
@@ -303,9 +281,6 @@ class CachedQualiSpeechDataset(Dataset):
             weights_only=False,
         )
 
-        # ----------------------------------------------------
-        # LOAD
-        # ----------------------------------------------------
 
         hidden = item["hidden"].float()
 
@@ -319,9 +294,7 @@ class CachedQualiSpeechDataset(Dataset):
             item["target"]
         )
 
-        # ----------------------------------------------------
         # TARGET CHECK
-        # ----------------------------------------------------
 
         if abs(
             target_csv - target_cache
@@ -333,9 +306,7 @@ class CachedQualiSpeechDataset(Dataset):
                 f"cache={target_cache}"
             )
 
-        # ----------------------------------------------------
         # FILE ID CHECK
-        # ----------------------------------------------------
 
         cache_file_id = str(
             item["file_id"]
@@ -353,9 +324,7 @@ class CachedQualiSpeechDataset(Dataset):
                 f"cache contains {cache_file_id}"
             )
 
-        # ----------------------------------------------------
         # SHAPE CHECK
-        # ----------------------------------------------------
 
         if hidden.ndim != 2:
 
@@ -390,9 +359,7 @@ class CachedQualiSpeechDataset(Dataset):
                 f"mask T={len(valid_mask)}"
             )
 
-        # ----------------------------------------------------
         # NUMERICAL CHECK
-        # ----------------------------------------------------
 
         if not torch.isfinite(hidden).all():
 
@@ -421,9 +388,7 @@ class CachedQualiSpeechDataset(Dataset):
         }
 
 
-# ============================================================
 # COLLATE
-# ============================================================
 
 def cached_collate(batch):
 
@@ -467,9 +432,7 @@ def cached_collate(batch):
     }
 
 
-# ============================================================
 # SOURCE-BALANCED IID SPLIT
-# ============================================================
 
 def make_source_balanced_split(
     df: pd.DataFrame,
@@ -509,9 +472,7 @@ def make_source_balanced_split(
         source_train_parts = []
         source_val_parts = []
 
-        # ----------------------------------------------------
         # STRATIFY BY QUALITY
-        # ----------------------------------------------------
 
         for target_value in sorted(
             source_df["target"].unique()
@@ -609,9 +570,7 @@ def make_source_balanced_split(
             f"val={len(source_val):4d}"
         )
 
-    # --------------------------------------------------------
     # COMBINE SOURCES
-    # --------------------------------------------------------
 
     train_df = pd.concat(
         train_parts,
@@ -642,9 +601,7 @@ def make_source_balanced_split(
         .reset_index(drop=True)
     )
 
-    # --------------------------------------------------------
     # BASIC VALIDATION
-    # --------------------------------------------------------
 
     if len(train_df) == 0:
 
@@ -669,9 +626,7 @@ def make_source_balanced_split(
             "does not equal full dataset."
         )
 
-    # --------------------------------------------------------
     # ID LEAKAGE CHECK
-    # --------------------------------------------------------
 
     train_ids = set(
         train_df["sample_id"]
@@ -692,9 +647,7 @@ def make_source_balanced_split(
             f"{sorted(overlap)[:20]}"
         )
 
-    # --------------------------------------------------------
     # SOURCE CHECK
-    # --------------------------------------------------------
 
     for source in source_order:
 
@@ -746,9 +699,7 @@ def make_source_balanced_split(
     )
 
 
-# ============================================================
 # SPLIT AUDIT
-# ============================================================
 
 def print_split_audit(
     train_df: pd.DataFrame,
@@ -785,9 +736,7 @@ def print_split_audit(
         source_table.to_string()
     )
 
-    # --------------------------------------------------------
     # TARGET DISTRIBUTION
-    # --------------------------------------------------------
 
     print()
     print("=" * 70)
@@ -854,9 +803,7 @@ def print_split_audit(
         target_table.round(2).to_string()
     )
 
-    # --------------------------------------------------------
     # TARGET BY SOURCE
-    # --------------------------------------------------------
 
     print()
     print("=" * 70)
@@ -909,9 +856,7 @@ def print_split_audit(
         )
 
 
-# ============================================================
 # METRICS
-# ============================================================
 
 @torch.no_grad()
 def compute_metrics(
@@ -939,9 +884,7 @@ def compute_metrics(
         target,
     ).item()
 
-    # --------------------------------------------------------
     # CCC
-    # --------------------------------------------------------
 
     pred_mean = pred.mean()
     target_mean = target.mean()
@@ -974,9 +917,7 @@ def compute_metrics(
         / (denominator + 1e-8)
     ).item()
 
-    # --------------------------------------------------------
     # PCC
-    # --------------------------------------------------------
     #
     # Official quality metric for the shared task.
     #
@@ -1015,9 +956,7 @@ def compute_metrics(
     }
 
 
-# ============================================================
 # EVALUATION
-# ============================================================
 
 @torch.no_grad()
 def evaluate(
@@ -1031,9 +970,7 @@ def evaluate(
     all_pred = []
     all_target = []
 
-    # --------------------------------------------------------
     # FORWARD OVER ENTIRE DATASET
-    # --------------------------------------------------------
 
     for batch in loader:
 
@@ -1071,9 +1008,7 @@ def evaluate(
             target.detach().cpu()
         )
 
-    # --------------------------------------------------------
     # GLOBAL CONCATENATION
-    # --------------------------------------------------------
 
     pred = torch.cat(
         all_pred,
@@ -1085,18 +1020,14 @@ def evaluate(
         dim=0,
     )
 
-    # --------------------------------------------------------
     # GLOBAL LOSS
-    # --------------------------------------------------------
 
     loss = quality_loss(
         pred,
         target,
     ).item()
 
-    # --------------------------------------------------------
     # GLOBAL METRICS
-    # --------------------------------------------------------
 
     metrics = compute_metrics(
         pred,
@@ -1108,9 +1039,7 @@ def evaluate(
     return metrics
 
 
-# ============================================================
 # MAIN
-# ============================================================
 
 def main():
 
@@ -1162,9 +1091,7 @@ def main():
         f"{EXPECTED_SAMPLES}"
     )
 
-    # ========================================================
     # BUILD DATASET
-    # ========================================================
 
     print()
     print("=" * 70)
@@ -1179,9 +1106,7 @@ def main():
         f"CSV rows: {len(df)}"
     )
 
-    # --------------------------------------------------------
     # REQUIRED COLUMNS
-    # --------------------------------------------------------
 
     if "id" not in df.columns:
 
@@ -1196,9 +1121,7 @@ def main():
             "'Overall quality' column."
         )
 
-    # --------------------------------------------------------
     # NORMALIZE SAMPLE ID
-    # --------------------------------------------------------
 
     df["sample_id"] = (
         df["id"]
@@ -1211,18 +1134,14 @@ def main():
         )
     )
 
-    # --------------------------------------------------------
     # TARGET
-    # --------------------------------------------------------
 
     df["target"] = pd.to_numeric(
         df["Overall quality"],
         errors="raise",
     )
 
-    # --------------------------------------------------------
     # CACHE AUDIT
-    # --------------------------------------------------------
 
     cache_ids = discover_cache_ids(
         CACHE_DIR
@@ -1233,25 +1152,19 @@ def main():
         cache_ids,
     )
 
-    # ========================================================
     # GROUP
-    # ========================================================
 
     df["group"] = df[
         "sample_id"
     ].map(get_group)
 
-    # ========================================================
     # SOURCE
-    # ========================================================
 
     df["source"] = df[
         "group"
     ].map(get_source)
 
-    # --------------------------------------------------------
     # SOURCE COUNTS
-    # --------------------------------------------------------
 
     print()
     print("=" * 70)
@@ -1277,9 +1190,7 @@ def main():
         source_counts.to_string()
     )
 
-    # --------------------------------------------------------
     # EXPECTED OFFICIAL COMPOSITION
-    # --------------------------------------------------------
 
     expected_source_counts = {
         "bvcc": 4546,
@@ -1310,9 +1221,7 @@ def main():
         "Source composition: PASS"
     )
 
-    # ========================================================
     # FULL TARGET DISTRIBUTION
-    # ========================================================
 
     print()
     print("=" * 70)
@@ -1326,9 +1235,7 @@ def main():
         .to_string()
     )
 
-    # ========================================================
     # SOURCE-BALANCED IID SPLIT
-    # ========================================================
 
     (
         train_df,
@@ -1337,18 +1244,14 @@ def main():
         df
     )
 
-    # ========================================================
     # SPLIT AUDIT
-    # ========================================================
 
     print_split_audit(
         train_df,
         val_df,
     )
 
-    # ========================================================
     # DATASETS
-    # ========================================================
 
     train_dataset = (
         CachedQualiSpeechDataset(
@@ -1364,9 +1267,7 @@ def main():
         )
     )
 
-    # ========================================================
     # DATALOADERS
-    # ========================================================
 
     train_loader = DataLoader(
         train_dataset,
@@ -1392,9 +1293,7 @@ def main():
         collate_fn=cached_collate,
     )
 
-    # ========================================================
     # MODEL
-    # ========================================================
 
     print()
     print("=" * 70)
@@ -1438,7 +1337,6 @@ def main():
         f"{total_params:,}"
     )
 
-    # --------------------------------------------------------
     # HuBERT 768 -> QualityHead
     #
     # AttentionPool:
@@ -1450,7 +1348,6 @@ def main():
     #
     # Total:
     #   769 + 196,864 + 257 = 197,890
-    # --------------------------------------------------------
 
     expected_params = 197_890
 
@@ -1464,18 +1361,14 @@ def main():
             f"{expected_params}"
         )
 
-    # ========================================================
     # OPTIMIZER
-    # ========================================================
 
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=LR,
     )
 
-    # ========================================================
     # INITIAL VALIDATION
-    # ========================================================
 
     initial_metrics = evaluate(
         model,
@@ -1513,9 +1406,7 @@ def main():
         f"{initial_metrics['pcc']:.8f}"
     )
 
-    # ========================================================
     # TRAINING
-    # ========================================================
 
     best_val_pcc = -float("inf")
     best_epoch = -1
@@ -1560,9 +1451,7 @@ def main():
                 non_blocking=True,
             )
 
-            # ------------------------------------------------
             # FORWARD
-            # ------------------------------------------------
 
             optimizer.zero_grad(
                 set_to_none=True
@@ -1578,9 +1467,7 @@ def main():
                 target,
             )
 
-            # ------------------------------------------------
             # NUMERICAL CHECK
-            # ------------------------------------------------
 
             if not torch.isfinite(loss):
 
@@ -1589,17 +1476,13 @@ def main():
                     f"loss at epoch {epoch}"
                 )
 
-            # ------------------------------------------------
             # BACKWARD
-            # ------------------------------------------------
 
             loss.backward()
 
             optimizer.step()
 
-            # ------------------------------------------------
             # STATS
-            # ------------------------------------------------
 
             n = target.size(0)
 
@@ -1614,9 +1497,7 @@ def main():
             / running_n
         )
 
-        # ----------------------------------------------------
         # VALIDATION
-        # ----------------------------------------------------
 
         val_metrics = evaluate(
             model,
@@ -1645,9 +1526,7 @@ def main():
             f"val_PCC={val_metrics['pcc']:.6f}"
         )
 
-        # ====================================================
         # BEST CHECKPOINT BY PCC
-        # ====================================================
 
         if (
             np.isfinite(val_metrics["pcc"])
@@ -1714,9 +1593,6 @@ def main():
                 f"PCC={val_metrics['pcc']:.6f})"
             )
 
-    # ========================================================
-    # SAVE HISTORY
-    # ========================================================
 
     history_df = pd.DataFrame(
         history
@@ -1727,9 +1603,6 @@ def main():
         index=False,
     )
 
-    # ========================================================
-    # LOAD BEST CHECKPOINT
-    # ========================================================
 
     print()
     print("=" * 70)
@@ -1768,9 +1641,7 @@ def main():
         f"{BEST_CKPT}"
     )
 
-    # ========================================================
     # FINAL EVALUATION
-    # ========================================================
 
     final_metrics = evaluate(
         model,
@@ -1811,9 +1682,7 @@ def main():
         f"{final_metrics['pcc']:.8f}"
     )
 
-    # ========================================================
     # SUMMARY
-    # ========================================================
 
     print()
     print("=" * 70)

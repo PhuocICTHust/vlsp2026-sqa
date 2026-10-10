@@ -202,7 +202,6 @@ def calibrate_thresholds(head: FaultFrameHead, loader: DataLoader):
     best_score = baseline_res["composite"]
     print(f"Baseline Post-processing Score: {best_score*100:.2f}% (F1: {baseline_res['f1_macro']:.4f}, IoU: {baseline_res['iou_macro']:.4f})")
 
-    # Greedy search per fault type with presence gate
     for ft in FAULT_TYPES:
         print(f"Cân chỉnh tham số cho lỗi: {ft}...")
         best_ft_cfg = best_cfg[ft]
@@ -239,7 +238,6 @@ def main():
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
-    # 1. Load partition 1
     old_items = []
     with open(OLD_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
@@ -257,7 +255,6 @@ def main():
                 })
     print(f"-> Đã nạp từ tập cũ: {len(old_items)} files.")
 
-    # 2. Load partition 2
     new_items = []
     with open(NEW_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
@@ -278,7 +275,6 @@ def main():
     all_train_items = old_items + new_items
     print(f"Tổng cộng mẫu huấn luyện: {len(all_train_items)} FILES tiếng Việt.")
 
-    # 3. Load validation set
     test_items = []
     with open(TEST_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
@@ -301,7 +297,6 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, collate_fn=fault_collate_fn)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, collate_fn=fault_collate_fn)
 
-    # 4. Initialize model
     print(f"-> Khởi tạo trọng số từ: {INIT_CKPT.name}")
     init_payload = torch.load(INIT_CKPT, map_location="cpu")
     head_kwargs = init_payload.get("fault_head_kwargs", {
@@ -313,12 +308,10 @@ def main():
     head = FaultFrameHead(**head_kwargs).to(DEVICE)
     head.load_state_dict(init_payload["fault_head_state_dict"])
 
-    # Baseline Zero-shot
     m_base = evaluate_fault_head(head, val_loader)
     print(f"\nĐiểm khởi điểm (Zero-shot) trên 125 clips Test Set:")
     print(f"  F1: {m_base['f1_macro']:.4f} | IoU: {m_base['iou_macro']:.4f} | Combined: {m_base['composite']*100:.2f}%")
 
-    # Start Fine-tuning
     print(f"\nBắt đầu Huấn luyện Fault Head v5 ({EPOCHS} epochs, lr={LR})...")
     optimizer = torch.optim.AdamW(head.parameters(), lr=LR, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-5)
@@ -365,7 +358,6 @@ def main():
 
     print(f"\nHoàn thành huấn luyện 2,000 files trong {time.time() - t0:.1f}s.")
 
-    # Save Best Weights
     head.load_state_dict(best_weights)
     best_ckpt = OUT_DIR / "best_fault_frame_head.pt"
     torch.save({
@@ -376,7 +368,6 @@ def main():
     }, best_ckpt)
     print(f"Đã lưu checkpoint tốt nhất tại: {best_ckpt}")
 
-    # Calibrate Post-processing on Test Set
     calib_cfg, final_res = calibrate_thresholds(head, val_loader)
     calib_json = OUT_DIR / "calibrated_postprocess_config.json"
     with open(calib_json, "w", encoding="utf-8") as f:

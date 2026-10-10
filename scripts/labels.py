@@ -31,9 +31,7 @@ from typing import Optional
 
 import pandas as pd
 
-# --------------------------------------------------------------------------
 # Configuration
-# --------------------------------------------------------------------------
 
 #: fault name -> (text column, matching score column). Score 5 means "clean".
 FAULT_COLUMNS = {
@@ -58,9 +56,7 @@ MAX_PLAUSIBLE_SECONDS = 30.0
 #: once real audio durations are known.
 END_OF_CLIP = None
 
-# --------------------------------------------------------------------------
 # Regular expressions
-# --------------------------------------------------------------------------
 
 NUM = r"(\d+(?:\.\d+)?)"
 UNIT = r"(?:\s*(?:s|sec|secs|second|seconds)\b)?"
@@ -123,9 +119,7 @@ DESCRIPTION_KEYWORDS = {
 }
 
 
-# --------------------------------------------------------------------------
 # Core parsing
-# --------------------------------------------------------------------------
 
 def _comma(text: str) -> str:
     """Decimal comma -> dot, except when the comma separates two ranges,
@@ -262,9 +256,7 @@ def parse_cell(raw, fault: str = "") -> dict:
     return _record(raw, "abnormal", rules=rules, reason="unrecognized_text")
 
 
-# --------------------------------------------------------------------------
 # Cross-checks
-# --------------------------------------------------------------------------
 
 def check_conflict(status: str, score) -> tuple[bool, str]:
     """Compare text with its score (5 = clean). Returns (conflict, reason)."""
@@ -305,9 +297,7 @@ def describe_sentence(description, fault: str) -> str:
     return " ".join(hits[:2])
 
 
-# --------------------------------------------------------------------------
 # DataFrame level
-# --------------------------------------------------------------------------
 
 def parse_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """One output row per (file, fault)."""
@@ -371,9 +361,7 @@ def summary(records: pd.DataFrame) -> pd.DataFrame:
     return table.loc[order]
 
 
-# --------------------------------------------------------------------------
 # Applying human audit verdicts (Hiếu's return file)
-# --------------------------------------------------------------------------
 
 AUDIT_DECISIONS = ("accept", "localized", "absent", "present_unknown_time", "unknown")
 
@@ -503,9 +491,7 @@ def apply_audit(records: pd.DataFrame, audit: pd.DataFrame,
     return rec, pd.DataFrame(log)
 
 
-# --------------------------------------------------------------------------
 # Output files
-# --------------------------------------------------------------------------
 
 def write_jsonl(records: pd.DataFrame, path: str) -> None:
     with open(path, "w", encoding="utf-8") as f:

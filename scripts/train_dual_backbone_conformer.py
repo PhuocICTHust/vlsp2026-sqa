@@ -133,7 +133,6 @@ def main():
     print("=" * 80, flush=True)
     print(f"Device: {DEVICE}", flush=True)
 
-    # 1. Load train items
     train_items = []
     for d_name, p_dir in [("old", OLD_DIR), ("new", NEW_DIR)]:
         l_path = p_dir / "labels.jsonl"
@@ -155,7 +154,6 @@ def main():
 
     print(f"Loaded {len(train_items)} dual-cached training files.", flush=True)
 
-    # 2. Load test items
     test_items = []
     with open(TEST_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:

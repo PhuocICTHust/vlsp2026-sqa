@@ -1,25 +1,4 @@
-"""
-Build VLSP 2026 SQA Submission v10 (Heterogeneous Tri-Model Ensemble).
-
-Configuration:
-- Quality Score (MOS):
-  SOTA Tri-Ensemble v2 (PCC = 0.7325 on QualiSpeech Dev).
-- Fault Localization:
-  Heterogeneous Tri-Model Ensemble:
-    60% Conformer Peak (best_conformer_25ep.pt)
-    + 20% Conformer-Pro (best_conformer_pro.pt)
-    + 20% Decoupled Tri-Branch (best_decoupled_fault_head.pt)
-  + Per-Class Calibrated Hysteresis Post-processing
-  + Energy-Adaptive Dynamic Thresholding:
-    - noise: tf=0.55, tl=0.25, md=0.0, beta=-0.02
-    - distortion: tf=0.55, tl=0.25, md=0.0, beta=0.00
-    - unnatural_pause: tf=0.45, tl=0.20, md=0.08, beta=-0.02
-  
-
-Outputs:
-- submissions/submission_v10.json
-- submissions/anhtraiAI_10.zip
-"""
+"""Submission generator for build_submission_v10."""
 
 import json
 import sys
@@ -77,7 +56,6 @@ def main():
         v5_data = json.load(f)
     mos_dict = {it["file_id"]: it["quality_score"] for it in v5_data}
 
-    # Load 3 Diverse Architectures
     print("Loading 3 diverse neural architectures...")
     m_peak = ConformerFaultHead(1024, 256, 2).eval().to(DEVICE)
     m_peak.load_state_dict(torch.load(ROOT / "outputs" / "fault_head_v5" / "best_conformer_25ep.pt", map_location="cpu"))
@@ -118,12 +96,10 @@ def main():
             hidden = backbone(wav_norm, attention_mask=mask).last_hidden_state
             vmask = torch.ones(hidden.shape[:2], dtype=torch.bool, device=DEVICE)
 
-            # Probabilities from 3 models
             p1 = torch.sigmoid(m_peak(hidden, valid_mask=vmask))[0].cpu().numpy()
             p2 = torch.sigmoid(m_pro(hidden, valid_mask=vmask))[0].cpu().numpy()
             p3 = torch.sigmoid(m_dec(hidden, valid_mask=vmask))[0].cpu().numpy()
 
-            # Heterogeneous Consensus: 60% Peak + 20% Pro + 20% Decoupled
             probs_ens = 0.60 * p1 + 0.20 * p2 + 0.20 * p3
 
             norm_rms = (rms_val - mean_rms) / (std_rms + 1e-6)
@@ -162,7 +138,6 @@ def main():
 
     print(f"\nVersion 10 successfully packaged to: {OUT_ZIP.resolve()} ({OUT_ZIP.stat().st_size / 1024:.2f} KB)")
 
-    # Verification
     with zipfile.ZipFile(OUT_ZIP, "r") as zf:
         assert zf.namelist() == ["submission.json"]
         with zf.open("submission.json") as f:

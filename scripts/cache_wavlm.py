@@ -9,9 +9,7 @@ import torch
 from torch.utils.data import DataLoader
 
 
-# ============================================================================
 # PATHS
-# ============================================================================
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -28,9 +26,7 @@ WAV_DIR = ROOT / "data" / "qualispeech" / "wav"
 CACHE_ROOT = ROOT / "data" / "qualispeech" / "wavlm_cache"
 
 
-# ============================================================================
 # CONFIG
-# ============================================================================
 
 SEED = 42
 
@@ -61,9 +57,7 @@ MODEL_NAME = "microsoft/wavlm-large"
 EXPECTED_HIDDEN_SIZE = 1024
 
 
-# ============================================================================
 # REPRODUCIBILITY
-# ============================================================================
 
 def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
@@ -72,9 +66,7 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-# ============================================================================
 # TINY SUBSET
-# ============================================================================
 
 def build_tiny_indices(
     df: pd.DataFrame,
@@ -109,9 +101,7 @@ def build_tiny_indices(
     return tiny_df
 
 
-# ============================================================================
 # CACHE PATH
-# ============================================================================
 
 def cache_path_for_file(file_id: str) -> Path:
     """
@@ -128,9 +118,6 @@ def cache_path_for_file(file_id: str) -> Path:
     return CACHE_ROOT / f"{stem}.pt"
 
 
-# ============================================================================
-# SAVE CACHE
-# ============================================================================
 
 def save_cache(
     path: Path,
@@ -197,9 +184,7 @@ def save_cache(
                 pass
 
 
-# ============================================================================
 # VERIFY EXISTING CACHE
-# ============================================================================
 
 def verify_cache_file(
     path: Path,
@@ -312,9 +297,7 @@ def verify_cache_file(
     }
 
 
-# ============================================================================
 # VERIFY DATASET MAPPING
-# ============================================================================
 
 def verify_pending_dataset_mapping(
     df: pd.DataFrame,
@@ -369,9 +352,7 @@ def verify_pending_dataset_mapping(
             )
 
 
-# ============================================================================
 # MAIN
-# ============================================================================
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="QualiSpeech WavLM representation cache")
@@ -402,9 +383,7 @@ def main() -> None:
     print(f"Tiny only:     {CACHE_TINY_ONLY}")
     print()
 
-    # ------------------------------------------------------------------------
     # Check paths
-    # ------------------------------------------------------------------------
 
     if not csv_path.exists():
         raise FileNotFoundError(
@@ -416,9 +395,6 @@ def main() -> None:
             f"WAV directory not found:\n{WAV_DIR}"
         )
 
-    # ------------------------------------------------------------------------
-    # Load CSV
-    # ------------------------------------------------------------------------
 
     df = pd.read_csv(csv_path)
 
@@ -435,9 +411,7 @@ def main() -> None:
 
     print(f"CSV rows:      {len(df)}")
 
-    # ------------------------------------------------------------------------
     # Check duplicate IDs
-    # ------------------------------------------------------------------------
 
     duplicate_ids = (
         df["id"]
@@ -458,9 +432,7 @@ def main() -> None:
             f"Examples: {duplicates[:10]}"
         )
 
-    # ------------------------------------------------------------------------
     # Index WAV files
-    # ------------------------------------------------------------------------
 
     wav_files = {
         p.name
@@ -469,9 +441,7 @@ def main() -> None:
 
     print(f"WAV files:     {len(wav_files)}")
 
-    # ------------------------------------------------------------------------
     # Check audio coverage
-    # ------------------------------------------------------------------------
 
     csv_ids = set(
         df["id"].astype(str)
@@ -499,9 +469,7 @@ def main() -> None:
             f"are not referenced by train.csv."
         )
 
-    # ------------------------------------------------------------------------
     # Determine samples
-    # ------------------------------------------------------------------------
 
     if CACHE_TINY_ONLY:
 
@@ -532,18 +500,14 @@ def main() -> None:
         f"Samples selected: {len(work_df)}"
     )
 
-    # ------------------------------------------------------------------------
     # Cache directory
-    # ------------------------------------------------------------------------
 
     CACHE_ROOT.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    # ------------------------------------------------------------------------
     # Determine existing valid caches
-    # ------------------------------------------------------------------------
 
     valid_cache_ids = []
     pending_ids = []
@@ -608,9 +572,7 @@ def main() -> None:
         f"{len(pending_ids)}"
     )
 
-    # ------------------------------------------------------------------------
     # If everything is cached
-    # ------------------------------------------------------------------------
 
     if not pending_ids:
 
@@ -630,14 +592,12 @@ def main() -> None:
 
     else:
 
-        # --------------------------------------------------------------------
         # Build dataframe containing ONLY pending samples.
         #
         # IMPORTANT:
         # DO NOT reset_index().
         #
         # QualiSpeechDataset receives indices into the ORIGINAL train.csv.
-        # --------------------------------------------------------------------
 
         pending_set = set(
             pending_ids
@@ -655,9 +615,7 @@ def main() -> None:
             pending_df.index.tolist()
         )
 
-        # --------------------------------------------------------------------
         # Verify pending selection
-        # --------------------------------------------------------------------
 
         pending_ids_from_df = set(
             pending_df["id"].astype(str)
@@ -683,9 +641,7 @@ def main() -> None:
                 f"{sorted(extra)[:10]}"
             )
 
-        # --------------------------------------------------------------------
         # Verify that these are ORIGINAL CSV indices.
-        # --------------------------------------------------------------------
 
         verify_pending_dataset_mapping(
             df=df,
@@ -702,9 +658,7 @@ def main() -> None:
             "Original CSV indices preserved: YES"
         )
 
-        # --------------------------------------------------------------------
         # Dataset
-        # --------------------------------------------------------------------
 
         dataset = QualiSpeechDataset(
             csv_path=csv_path,
@@ -712,9 +666,6 @@ def main() -> None:
             indices=pending_indices,
         )
 
-        # --------------------------------------------------------------------
-        # Load frozen WavLM
-        # --------------------------------------------------------------------
 
         print()
         print(
@@ -735,9 +686,7 @@ def main() -> None:
             f"{hidden_size}"
         )
 
-        # --------------------------------------------------------------------
         # Verify WavLM frozen
-        # --------------------------------------------------------------------
 
         trainable_backbone = [
             name
@@ -758,9 +707,7 @@ def main() -> None:
             "WavLM parameters: FROZEN"
         )
 
-        # --------------------------------------------------------------------
         # DataLoader
-        # --------------------------------------------------------------------
 
         loader = DataLoader(
             dataset,
@@ -770,9 +717,6 @@ def main() -> None:
             collate_fn=qualispeech_collate,
         )
 
-        # --------------------------------------------------------------------
-        # Feature extraction
-        # --------------------------------------------------------------------
 
         print()
         print(
@@ -806,9 +750,7 @@ def main() -> None:
                 target = batch["target"]
                 file_ids = batch["file_id"]
 
-                # ------------------------------------------------------------
                 # WavLM
-                # ------------------------------------------------------------
 
                 hidden = backbone(
                     wav,
@@ -821,9 +763,7 @@ def main() -> None:
                     )
                 )
 
-                # ------------------------------------------------------------
                 # Shape checks
-                # ------------------------------------------------------------
 
                 if hidden.ndim != 3:
 
@@ -863,9 +803,6 @@ def main() -> None:
                         f"{hidden_size}"
                     )
 
-                # ------------------------------------------------------------
-                # Save each sample
-                # ------------------------------------------------------------
 
                 for i, file_id_raw in enumerate(
                     file_ids
@@ -877,9 +814,7 @@ def main() -> None:
 
                     file_target = target[i]
 
-                    # --------------------------------------------------------
                     # CRITICAL DATASET MAPPING CHECK
-                    # --------------------------------------------------------
 
                     matching_rows = df[
                         df["id"]
@@ -920,9 +855,7 @@ def main() -> None:
                             f"{csv_target}"
                         )
 
-                    # --------------------------------------------------------
                     # Make sure this file was actually pending.
-                    # --------------------------------------------------------
 
                     if file_id not in pending_set:
 
@@ -932,9 +865,7 @@ def main() -> None:
                             f"{file_id}"
                         )
 
-                    # --------------------------------------------------------
                     # Valid frames
-                    # --------------------------------------------------------
 
                     sample_valid = (
                         valid_mask[i].bool()
@@ -950,9 +881,7 @@ def main() -> None:
                         device=sample_hidden.device,
                     )
 
-                    # --------------------------------------------------------
                     # Shape checks
-                    # --------------------------------------------------------
 
                     if sample_hidden.ndim != 2:
 
@@ -982,12 +911,9 @@ def main() -> None:
                             f"{EXPECTED_HIDDEN_SIZE}"
                         )
 
-                    # --------------------------------------------------------
-                    # Save cache
                     #
                     # Target is explicitly taken from CSV after verifying
                     # Dataset mapping.
-                    # --------------------------------------------------------
 
                     cache_path = (
                         cache_path_for_file(
@@ -1003,9 +929,7 @@ def main() -> None:
                         file_id=file_id,
                     )
 
-                    # --------------------------------------------------------
                     # Verify the file immediately after saving.
-                    # --------------------------------------------------------
 
                     saved_info = (
                         verify_cache_file(
@@ -1058,9 +982,7 @@ def main() -> None:
                         f"{csv_target:.1f}"
                     )
 
-                # ------------------------------------------------------------
                 # GPU memory cleanup
-                # ------------------------------------------------------------
 
                 del wav
                 del attention_mask
@@ -1084,10 +1006,8 @@ def main() -> None:
             f"{total_frames}"
         )
 
-        # --------------------------------------------------------------------
         # Important:
         # Number of actually saved files must match pending IDs.
-        # --------------------------------------------------------------------
 
         if saved != len(pending_ids):
 
@@ -1097,9 +1017,7 @@ def main() -> None:
                 f"pending={len(pending_ids)}"
             )
 
-    # =========================================================================
     # FINAL VERIFICATION
-    # =========================================================================
 
     print()
     print("=" * 72)
@@ -1135,9 +1053,7 @@ def main() -> None:
             ),
         )
 
-        # --------------------------------------------------------------------
         # File ID consistency
-        # --------------------------------------------------------------------
 
         if info["file_id"] != file_id:
 
@@ -1147,9 +1063,7 @@ def main() -> None:
                 f"cache={info['file_id']}"
             )
 
-        # --------------------------------------------------------------------
         # Target consistency
-        # --------------------------------------------------------------------
 
         expected_target = float(
             row["Overall quality"]
@@ -1167,9 +1081,7 @@ def main() -> None:
                 f"CSV={expected_target}"
             )
 
-        # --------------------------------------------------------------------
         # Hidden size
-        # --------------------------------------------------------------------
 
         if info["hidden_size"] != (
             EXPECTED_HIDDEN_SIZE
@@ -1183,9 +1095,7 @@ def main() -> None:
                 f"{EXPECTED_HIDDEN_SIZE}"
             )
 
-        # --------------------------------------------------------------------
         # Valid frames
-        # --------------------------------------------------------------------
 
         if info["valid_frames"] <= 0:
 
@@ -1198,9 +1108,7 @@ def main() -> None:
         verified += 1
         frames += info["frames"]
 
-    # =========================================================================
     # FINAL SUMMARY
-    # =========================================================================
 
     print(
         f"Expected files:  "

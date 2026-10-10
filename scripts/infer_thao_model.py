@@ -94,7 +94,6 @@ def main():
                 raise FileNotFoundError(f"Missing audio: {wav_path}")
 
             wav = load_audio(wav_path).to(DEVICE)[None]  # [1, T]
-            # Normalization as configured in Thao's model
             wav = (wav - wav.mean(dim=1, keepdim=True)) / torch.sqrt(
                 wav.var(dim=1, unbiased=False, keepdim=True) + 1e-7
             )

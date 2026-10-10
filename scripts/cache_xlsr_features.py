@@ -66,13 +66,10 @@ def main():
     for p in model.parameters():
         p.requires_grad = False
 
-    # 1. Gold test set
     extract_folder(ROOT / "data" / "vietnamese_test_v1" / "wav", ROOT / "data" / "vietnamese_test_v1" / "xlsr_cache", model)
 
-    # 2. Aug v3 train (1000 files)
     extract_folder(ROOT / "data" / "vietnamese_aug_v3" / "train" / "wav", ROOT / "data" / "vietnamese_aug_v3" / "train" / "xlsr_cache", model)
 
-    # 3. Aug v1 train (1000 files)
     extract_folder(ROOT / "data" / "vietnamese_aug" / "wav", ROOT / "data" / "vietnamese_aug" / "xlsr_cache", model)
 
     print("\n★ HOÀN TẤT TRÍCH XUẤT TOÀN BỘ XLS-R CACHE!", flush=True)

@@ -1,25 +1,4 @@
-"""
-Build VLSP 2026 SQA Submission v12 (Super 4-Model Cross-Backbone Ensemble).
-
-Configuration:
-- Quality Score (MOS):
-  SOTA Tri-Ensemble v2 (PCC = 0.7325 on QualiSpeech Dev).
-- Fault Localization:
-  Super 4-Model Heterogeneous Ensemble:
-    50% Dual-Backbone Conformer (WavLM-Large 1024 + XLS-R-300M 1024 = 2048-dim)
-    + 25% Conformer Peak (WavLM-Large 1024-dim, Epoch 9)
-    + 15% Conformer-Pro Multi-Scale (WavLM-Large 1024-dim, Epoch 15)
-    + 10% Decoupled Tri-Branch (TCN + BiLSTM 1024-dim)
-  + Per-Class Calibrated Hysteresis Post-processing:
-    - noise: tf=0.45, tl=0.25, md=0.08, merge_gap=0.04
-    - distortion: tf=0.55, tl=0.25, md=0.00, merge_gap=0.04
-    - unnatural_pause: tf=0.55, tl=0.20, md=0.08, merge_gap=0.04
-  
-
-Outputs:
-- submissions/submission_v12.json
-- submissions/anhtraiAI_12.zip
-"""
+"""Submission generator for build_submission_v12."""
 
 import json
 import sys
@@ -78,23 +57,18 @@ def main():
     mos_dict = {it["file_id"]: it["quality_score"] for it in v5_data}
 
     print("Loading 4 diverse neural architectures...")
-    # 1. Dual-Backbone Conformer (2048-dim)
     m_dual = DualBackboneConformerHead(2048, 256, 2).eval().to(DEVICE)
     m_dual.load_state_dict(torch.load(ROOT / "outputs" / "fault_head_v5" / "best_dual_backbone_conformer.pt", map_location="cpu"))
 
-    # 2. Conformer Peak (1024-dim)
     m_peak = ConformerFaultHead(1024, 256, 2).eval().to(DEVICE)
     m_peak.load_state_dict(torch.load(ROOT / "outputs" / "fault_head_v5" / "best_conformer_25ep.pt", map_location="cpu"))
 
-    # 3. Conformer-Pro Multi-Scale (1024-dim)
     m_pro = ConformerProFaultHead(1024, 256, 2).eval().to(DEVICE)
     m_pro.load_state_dict(torch.load(ROOT / "outputs" / "fault_head_v5" / "best_conformer_pro.pt", map_location="cpu"))
 
-    # 4. Decoupled Tri-Branch (1024-dim)
     m_dec = DecoupledFaultHead(1024, 128).eval().to(DEVICE)
     m_dec.load_state_dict(torch.load(ROOT / "outputs" / "fault_head_v5" / "best_decoupled_fault_head.pt", map_location="cpu"))
 
-    # 5. Backbones
     print("Loading WavLM-Large backbone...")
     wavlm_bb = WavLMModel.from_pretrained("microsoft/wavlm-large").eval().to(DEVICE)
     for p in wavlm_bb.parameters(): p.requires_grad = False
@@ -120,7 +94,6 @@ def main():
             mask = torch.ones_like(wav_gpu, dtype=torch.long)
             wav_norm = normalize_waveform(wav_gpu, mask)
 
-            # Feature extraction
             h_wavlm = wavlm_bb(wav_norm, attention_mask=mask).last_hidden_state
             h_xlsr = xlsr_bb(wav_gpu).last_hidden_state
 
@@ -131,13 +104,11 @@ def main():
 
             vmask = torch.ones((1, min_t), dtype=torch.bool, device=DEVICE)
 
-            # Probabilities from 4 models
             pd = torch.sigmoid(m_dual(h_fused, valid_mask=vmask))[0].cpu().numpy()
             pp = torch.sigmoid(m_peak(h_wavlm, valid_mask=vmask))[0].cpu().numpy()
             pr = torch.sigmoid(m_pro(h_wavlm, valid_mask=vmask))[0].cpu().numpy()
             dc = torch.sigmoid(m_dec(h_wavlm, valid_mask=vmask))[0].cpu().numpy()
 
-            # Super 4-Model Ensemble: 50% Dual + 25% Peak + 15% Pro + 10% Decoupled
             probs_ens = 0.50 * pd + 0.25 * pp + 0.15 * pr + 0.10 * dc
 
             clip_faults = {}
@@ -165,7 +136,6 @@ def main():
 
     print(f"\n★ Version 12 successfully packaged to: {OUT_ZIP.resolve()} ({OUT_ZIP.stat().st_size / 1024:.2f} KB)")
 
-    # Strict Verification
     with zipfile.ZipFile(OUT_ZIP, "r") as zf:
         assert zf.namelist() == ["submission.json"], "Archive must contain only submission.json"
         with zf.open("submission.json") as f:

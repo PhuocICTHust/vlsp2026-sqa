@@ -44,7 +44,6 @@ def main():
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
-    # Load items
     old_items = []
     with open(OLD_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:

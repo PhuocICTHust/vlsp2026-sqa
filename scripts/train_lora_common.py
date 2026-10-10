@@ -78,7 +78,6 @@ DEFAULT_MODEL_NAMES = {
     "hubert": "facebook/hubert-base-ls960",
     # Same size (95M, 12 layers, 768-d) and pre-training data (LibriSpeech 960 h)
     # as hubert-base-ls960 -> clean backbone comparison. For a multilingual
-    # backbone that has seen Vietnamese, pass --model-name facebook/wav2vec2-xls-r-300m.
     "wav2vec2": "facebook/wav2vec2-base",
 }
 
@@ -215,9 +214,7 @@ def prepare_dataframe() -> pd.DataFrame:
     return df
 
 
-# ======================================================================
 # WAVLM MANUAL LORA SUPPORT
-# ======================================================================
 
 class ManualLoRA(nn.Module):
     def __init__(self, in_features: int, out_features: int, r: int, alpha: float):

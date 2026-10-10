@@ -53,7 +53,6 @@ class ConformerConvModule(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor, mask_f: torch.Tensor) -> torch.Tensor:
-        # x: [B, T, D]
         res = x
         x = self.layer_norm(x) * mask_f
         x = x.transpose(1, 2)  # [B, D, T]
@@ -97,15 +96,11 @@ class ConformerBlock(nn.Module):
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         mask_f = mask.unsqueeze(-1).to(x.dtype)
-        # FFN 1 (half step)
         x = x + 0.5 * self.ffn1(self.ffn1_norm(x)) * mask_f
-        # Self-Attention
         norm_x = self.attn_norm(x)
         attn_out, _ = self.attn(norm_x, norm_x, norm_x, key_padding_mask=~mask)
         x = (x + self.attn_drop(attn_out)) * mask_f
-        # Conv module
         x = self.conv_module(x, mask_f)
-        # FFN 2 (half step)
         x = x + 0.5 * self.ffn2(self.ffn2_norm(x)) * mask_f
         return self.final_norm(x) * mask_f
 
@@ -139,7 +134,6 @@ def main():
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
-    # Load items
     old_items = []
     with open(OLD_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:

@@ -100,7 +100,6 @@ def main():
                 continue
 
             wav = load_audio(wav_path).to(DEVICE)[None]
-            # Standard audio normalization
             wav = (wav - wav.mean(dim=1, keepdim=True)) / torch.sqrt(
                 wav.var(dim=1, unbiased=False, keepdim=True) + 1e-7
             )

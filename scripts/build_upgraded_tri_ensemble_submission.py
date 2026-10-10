@@ -1,17 +1,4 @@
-"""
-Build UPGRADED VLSP 2026 SQA Submission JSON using SOTA Tri-Ensemble v2.
-
-Upgraded Tri-Ensemble Configuration:
-- Quality Score (MOS):
-  0.247 * WavLM-Large LoRA UtmosNisqa
-  + 0.364 * Frozen WavLM UtmosNisqa
-  + 0.389 * wav2vec2-XLS-R-300M UtmosNisqa (NEW Thảo model: vdmhth123/vlsp2026-sqa-wav2vec2-xls-r-300m-utmos-trainval)
-- Fault Localization:
-  SOTA Multi-scale TCN + BiLSTM Context with Calibrated Hysteresis Post-processing.
-
-Output:
-submission_v2.json -> anhtraiAI_2.zip
-"""
+"""Submission generator for build_upgraded_tri_ensemble_submission."""
 from __future__ import annotations
 
 import argparse
@@ -61,7 +48,6 @@ from sqa.model import UtmosNisqaQualityHead, normalize_waveform
 from sqa.postprocess import BASELINE_POSTPROCESS, PostProcessConfig, predict_fault_type, serialize_intervals
 from sqa.validator import validate_submission
 
-# Default Paths
 DEFAULT_LORA_CKPT = ROOT / "checkpoints" / "wavlm_utmos_nisqa_lora_trainval_best.pt"
 DEFAULT_FROZEN_CKPT = ROOT / "outputs" / "cached_trainval_utmos_tuned" / "best_quality_head.pt"
 DEFAULT_FAULT_CKPT = ROOT / "outputs" / "fault_head_trainval" / "best_fault_frame_head.pt"
@@ -69,9 +55,6 @@ DEFAULT_CALIB_CONFIG = ROOT / "outputs" / "fault_head_trainval" / "calibrated_po
 THAO_NEW_HF_REPO = "vdmhth123/vlsp2026-sqa-wav2vec2-xls-r-300m-utmos-trainval"
 
 
-# ----------------------------------------------------------------------
-# AUDIO HELPER
-# ----------------------------------------------------------------------
 def load_audio_mono(path: Path, target_sr: int = 16000) -> tuple[torch.Tensor, float]:
     data, sr = sf.read(str(path), dtype="float32", always_2d=True)
     wav = data.mean(axis=1)
@@ -85,9 +68,6 @@ def load_audio_mono(path: Path, target_sr: int = 16000) -> tuple[torch.Tensor, f
     return tensor, duration
 
 
-# ----------------------------------------------------------------------
-# NEW THAO MODEL HEAD
-# ----------------------------------------------------------------------
 class ThaoUtmosNisqaHead(nn.Module):
     def __init__(self, h, bilstm_hidden=128, mlp_hidden=256, dropout=0.0, **_):
         super().__init__()
@@ -124,9 +104,6 @@ def load_thao_new_model(device: torch.device):
     return backbone, head
 
 
-# ----------------------------------------------------------------------
-# MAIN SUBMISSION BUILDER
-# ----------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description="Build complete VLSP 2026 SQA final submission JSON with UPGRADED Tri-Ensemble.")
     parser.add_argument("--audio-dir", type=str, default="data/private_test/audio", help="Folder containing WAV files.")
@@ -151,7 +128,6 @@ def main():
     print(f"Device:           {device}")
     print(f"Output JSON:      {args.out_json}")
 
-    # 1. Load Calibrated Post-Processing Config
     post_cfg = BASELINE_POSTPROCESS
     calib_path = Path(args.calib_config)
     if calib_path.exists():
@@ -164,7 +140,6 @@ def main():
             }
             print(f"Loaded calibrated post-processing config from: {calib_path.name}")
 
-    # Discover audio files
     wav_files = sorted(audio_dir.rglob("*.wav"))
     if not wav_files:
         raise RuntimeError(f"No .wav files found in {audio_dir}")
@@ -177,9 +152,6 @@ def main():
         audios[p.name] = (wav, dur)
     print(f"Loaded {len(audios)} audio clips.")
 
-    # ------------------------------------------------------------------
-    # PASS 1: Frozen WavLM -> Fault Localization & Model 2 (Frozen MOS)
-    # ------------------------------------------------------------------
     print("\n" + "=" * 60)
     print("PASS 1: Frozen WavLM (Fault Localization + Frozen Head MOS)")
     print("=" * 60)
@@ -227,9 +199,6 @@ def main():
     if device.type == "cuda":
         torch.cuda.empty_cache()
 
-    # ------------------------------------------------------------------
-    # PASS 2: WavLM-Large LoRA -> Model 1 (LoRA MOS)
-    # ------------------------------------------------------------------
     print("\n" + "=" * 60)
     print("PASS 2: WavLM-Large LoRA (Model 1 MOS)")
     print("=" * 60)
@@ -263,9 +232,6 @@ def main():
     if device.type == "cuda":
         torch.cuda.empty_cache()
 
-    # ------------------------------------------------------------------
-    # PASS 3: wav2vec2-XLS-R-300M UtmosNisqa MOS
-    # ------------------------------------------------------------------
     print("\n" + "=" * 60)
     print("PASS 3: NEW wav2vec2-XLS-R-300M UtmosNisqa (Thảo Model MOS)")
     print("=" * 60)
@@ -291,9 +257,6 @@ def main():
     if device.type == "cuda":
         torch.cuda.empty_cache()
 
-    # ------------------------------------------------------------------
-    # ENSEMBLE COMBINATION V2
-    # ------------------------------------------------------------------
     print("\n" + "=" * 60)
     print("COMBINING UPGRADED TRI-ENSEMBLE V2 PREDICTIONS")
     print("=" * 60)
@@ -315,7 +278,6 @@ def main():
             "faults": faults_all[fname],
         })
 
-    # Validate submission format
     print("\nValidating submission JSON against official VLSP 2026 constraints...")
     errors = validate_submission(entries, duration_lookup, strict=False)
     if errors:

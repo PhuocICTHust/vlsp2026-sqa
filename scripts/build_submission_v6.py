@@ -1,20 +1,4 @@
-"""
-Build UPGRADED VLSP 2026 SQA Submission v6 .
-
-Configuration:
-- Quality Score (MOS):
-  Identical SOTA Tri-Ensemble v2 (PCC = 0.7325 on QualiSpeech Dev):
-  0.247 * WavLM LoRA + 0.364 * Frozen WavLM + 0.389 * Thảo XLS-R-300M UtmosNisqa
-- Fault Localization:
-  Super-Ensemble: 70% Conformer Frame Decoder + 30% Decoupled Tri-Branch
-  + Energy-Adaptive Dynamic Thresholding (RMS-aware)
-  + Per-Class Calibrated Hysteresis & Min Duration Post-Processing
-  
-
-Outputs:
-- submissions/submission_v6.json
-- submissions/anhtraiAI_6.zip
-"""
+"""Submission generator for build_submission_v6."""
 
 import json
 import math
@@ -61,7 +45,6 @@ def load_audio_mono(audio_path: Path, target_sr: int = 16000) -> tuple[torch.Ten
         import resampy
         wav = resampy.resample(wav, sr, target_sr)
     
-    # Compute RMS dBFS
     rms = np.sqrt(np.mean(wav ** 2) + 1e-12)
     rms_dbfs = 20.0 * np.log10(rms + 1e-9)
     return torch.from_numpy(wav).float(), duration, float(rms_dbfs)
@@ -73,7 +56,6 @@ def main():
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
-    # Load MOS predictions from base submission
     if not SUB_V5_PATH.exists():
         raise FileNotFoundError(f"Missing {SUB_V5_PATH}")
     with open(SUB_V5_PATH, "r", encoding="utf-8") as f:
@@ -81,7 +63,6 @@ def main():
     mos_dict = {it["file_id"]: it["quality_score"] for it in v5_data}
     print(f"Loaded {len(mos_dict)} quality scores from SOTA Tri-Ensemble v2.")
 
-    # 2. Super-Ensemble Post-process Config
     cfgs = {
         "noise": {"tf": 0.55, "tl": 0.15, "md": 0.12, "beta": +0.02},
         "distortion": {"tf": 0.50, "tl": 0.25, "md": 0.08, "beta": -0.02},
@@ -91,14 +72,12 @@ def main():
     for ft, c in cfgs.items():
         print(f"  [{ft.upper()}]: tau_frame={c['tf']}, tau_low={c['tl']}, min_dur={c['md']}, beta={c['beta']:+.2f}")
 
-    # 3. Load Fault Models
     model_conf = ConformerFaultHead(1024, 256, 2).eval().to(DEVICE)
     model_conf.load_state_dict(torch.load(ROOT / "outputs" / "fault_head_v5" / "best_conformer_fault_head.pt", map_location="cpu"))
 
     model_dec = DecoupledFaultHead(1024, 128).eval().to(DEVICE)
     model_dec.load_state_dict(torch.load(ROOT / "outputs" / "fault_head_v5" / "best_decoupled_fault_head.pt", map_location="cpu"))
 
-    # 4. Load WavLM Backbone for Feature Extraction
     print("\nLoading WavLM-Large backbone...")
     backbone = WavLMModel.from_pretrained("microsoft/wavlm-large").eval().to(DEVICE)
     for p in backbone.parameters():
@@ -107,7 +86,6 @@ def main():
     wav_files = sorted(list(AUDIO_DIR.glob("*.wav")))
     print(f"Processing {len(wav_files)} Private Test clips...")
 
-    # First pass: compute rms stats
     all_rms = []
     audio_cache = {}
     for p in wav_files:
@@ -128,16 +106,13 @@ def main():
             hidden = backbone(wav_norm, attention_mask=mask).last_hidden_state
             vmask = torch.ones(hidden.shape[:2], dtype=torch.bool, device=DEVICE)
 
-            # Compute probabilities
             prob_conf = torch.sigmoid(model_conf(hidden, valid_mask=vmask))[0].cpu().numpy()
             prob_dec = torch.sigmoid(model_dec(hidden, valid_mask=vmask))[0].cpu().numpy()
 
-            # Super-Ensemble: 70% Conformer + 30% Decoupled
             prob_ens = 0.70 * prob_conf + 0.30 * prob_dec
 
             norm_rms = (rms_val - mean_rms) / (std_rms + 1e-6)
 
-            # Per-class prediction with Energy-Adaptive Dynamic Thresholding
             clip_faults = {}
             for c_idx, ft in enumerate(FAULT_TYPES):
                 c = cfgs[ft]
@@ -164,21 +139,17 @@ def main():
             if i % 50 == 0 or i == len(wav_files):
                 print(f"Processed {i:3d}/{len(wav_files)} files...")
 
-    # Sort by file_id
     final_submissions.sort(key=lambda x: x["file_id"])
 
-    # 5. Save submission_v6.json
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT_JSON, "w", encoding="utf-8") as f:
         json.dump(final_submissions, f, indent=2, ensure_ascii=False)
     print(f"\nSaved submission JSON: {OUT_JSON.resolve()}")
 
-    # 6. Package into anhtraiAI_6.zip
     with zipfile.ZipFile(OUT_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(OUT_JSON, arcname="submission.json")
     print(f"Packaged ZIP archive: {OUT_ZIP.resolve()} ({OUT_ZIP.stat().st_size / 1024:.2f} KB)")
 
-    # 7. Verification
     print("\n" + "=" * 75)
     print("VERIFICATION & SUMMARY OF VERSION 6")
     print("=" * 75)

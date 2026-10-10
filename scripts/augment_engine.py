@@ -92,9 +92,7 @@ ENGINE_VERSION = "vi_aug_engine_v3.1"
 AUDIO_EXT = (".wav", ".flac")
 
 
-# =============================================================================
 # I/O
-# =============================================================================
 def load_audio(path: Path, target_sr: int = SR) -> tuple[np.ndarray, dict]:
     """float32 mono in [-1, 1] at target_sr, plus header info for the audit."""
     if sf is not None:
@@ -155,9 +153,7 @@ def noise_category(stem: str) -> str | None:
     return m.group(1) if m else None
 
 
-# =============================================================================
 # Basic signal measurements
-# =============================================================================
 def frame_rms(x: np.ndarray, win: float = 0.02, sr: int = SR) -> np.ndarray:
     n = int(round(win * sr))
     m = len(x) // n
@@ -208,9 +204,7 @@ def splice(base: np.ndarray, effected: np.ndarray, s: int, e: int, ramp: int) ->
     return out
 
 
-# =============================================================================
 # AUDIT (gatekeeping, automatic part)
-# =============================================================================
 def audit_file(path: Path, kind: str) -> dict:
     row = {"file": path.name, "kind": kind, "flags": []}
     try:
@@ -329,9 +323,7 @@ def cmd_audit(args) -> None:
         print(f"[audit] {kind}: {len(rows)} files, {len(flagged)} flagged -> {out}/gatekeeping_{kind}.md")
 
 
-# =============================================================================
 # Degradations
-# =============================================================================
 @dataclass
 class Event:
     fault: str
@@ -1024,9 +1016,7 @@ def audibility_db(x: np.ndarray, y: np.ndarray) -> float:
     return round(max(mel_d, env_d), 2)
 
 
-# =============================================================================
 # Interval utilities (same semantics as sqa/timegrid.normalize_intervals)
-# =============================================================================
 def normalize_intervals(iv: list[list[float]], dur: float) -> list[list[float]]:
     iv = sorted([max(0.0, s), min(dur, e)] for s, e in iv if e > s)
     out: list[list[float]] = []
@@ -1056,9 +1046,7 @@ def serialize(iv: list[list[float]], dur: float) -> list[list[float]]:
     return normalize_intervals(out, dur6)
 
 
-# =============================================================================
 # GENERATE
-# =============================================================================
 RECIPES = {  # name -> faults applied
     "clean": (),
     "noise": ("noise",),
@@ -1325,9 +1313,7 @@ def write_report(out: Path, rows: list[dict], args) -> None:
     (out / "generation_report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-# =============================================================================
 # CLI
-# =============================================================================
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)

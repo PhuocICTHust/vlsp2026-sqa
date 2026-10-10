@@ -87,13 +87,11 @@ def main():
         m = compute_metrics(p, targets)
         print(f"{name:38s} | PCC: {m['pcc']:.4f} | CCC: {m['ccc']:.4f} | MSE: {m['mse']:.4f} | MAE: {m['mae']:.4f}")
 
-    # Fault Localization metrics from calibrated postprocess config
     with open(FAULT_CFG, "r", encoding="utf-8") as f:
         fault_data = json.load(f)
     f1_macro = fault_data["calibrated_metrics"]["f1_macro"]
     iou_macro = fault_data["calibrated_metrics"]["iou_macro"]
 
-    # 1. Old Tri-Ensemble (WavLM LoRA + Frozen WavLM + Old Thao)
     mat_old = np.column_stack([p_lora, p_frozen, p_thao_old])
     w_old, pcc_old = optimize_ensemble(mat_old, targets)
     p_comb_old = mat_old @ w_old
@@ -106,7 +104,6 @@ def main():
     print(f"   PCC: {m_comb_old['pcc']:.4f} | CCC: {m_comb_old['ccc']:.4f} | MSE: {m_comb_old['mse']:.4f}")
     print(f"   FINAL COMPETITION SCORE: {score_old:.4f} ({score_old*100:.2f}%)")
 
-    # 2. New Tri-Ensemble (WavLM LoRA + Frozen WavLM + New Thao Utmos)
     mat_new = np.column_stack([p_lora, p_frozen, p_thao_new])
     w_new, pcc_new = optimize_ensemble(mat_new, targets)
     p_comb_new = mat_new @ w_new
@@ -119,7 +116,6 @@ def main():
     print(f"   PCC: {m_comb_new['pcc']:.4f} | CCC: {m_comb_new['ccc']:.4f} | MSE: {m_comb_new['mse']:.4f}")
     print(f"   FINAL COMPETITION SCORE: {score_new:.4f} ({score_new*100:.2f}%)")
 
-    # 3. Quad-Ensemble (WavLM LoRA + Frozen WavLM + New Thao + HuBERT LoRA)
     mat_quad = np.column_stack([p_lora, p_frozen, p_thao_new, p_hubert])
     w_quad, pcc_quad = optimize_ensemble(mat_quad, targets)
     p_comb_quad = mat_quad @ w_quad

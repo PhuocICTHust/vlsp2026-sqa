@@ -1,23 +1,4 @@
-"""
-Build VLSP 2026 SQA Submission v11 (Cross-Backbone Conformer Ensemble).
-
-Configuration:
-- Quality Score (MOS):
-  SOTA Tri-Ensemble v2 (PCC = 0.7325 on QualiSpeech Dev).
-- Fault Localization:
-  Cross-Backbone Conformer Ensemble:
-    60% Dual-Backbone Conformer (WavLM-Large 1024 + XLS-R-300M 1024 = 2048-dim)
-    + 40% Conformer Peak (WavLM-Large 1024-dim, Epoch 9)
-  + Per-Class Calibrated Hysteresis Post-processing:
-    - noise: tf=0.50, tl=0.20, md=0.08
-    - distortion: tf=0.55, tl=0.25, md=0.00
-    - unnatural_pause: tf=0.40, tl=0.15, md=0.04
-  
-
-Outputs:
-- submissions/submission_v11.json
-- submissions/anhtraiAI_11.zip
-"""
+"""Submission generator for build_submission_v11."""
 
 import json
 import sys
@@ -74,15 +55,12 @@ def main():
     mos_dict = {it["file_id"]: it["quality_score"] for it in v5_data}
 
     print("Loading models...")
-    # 1. Dual-Backbone Conformer Head
     m_dual = DualBackboneConformerHead(2048, 256, 2).eval().to(DEVICE)
     m_dual.load_state_dict(torch.load(ROOT / "outputs" / "fault_head_v5" / "best_dual_backbone_conformer.pt", map_location="cpu"))
 
-    # 2. Conformer Peak (WavLM-Large)
     m_peak = ConformerFaultHead(1024, 256, 2).eval().to(DEVICE)
     m_peak.load_state_dict(torch.load(ROOT / "outputs" / "fault_head_v5" / "best_conformer_25ep.pt", map_location="cpu"))
 
-    # 3. Backbones
     print("Loading WavLM-Large backbone...")
     wavlm_bb = WavLMModel.from_pretrained("microsoft/wavlm-large").eval().to(DEVICE)
     for p in wavlm_bb.parameters(): p.requires_grad = False
@@ -108,7 +86,6 @@ def main():
             mask = torch.ones_like(wav_gpu, dtype=torch.long)
             wav_norm = normalize_waveform(wav_gpu, mask)
 
-            # Feature extraction
             h_wavlm = wavlm_bb(wav_norm, attention_mask=mask).last_hidden_state
             h_xlsr = xlsr_bb(wav_gpu).last_hidden_state
 
@@ -119,11 +96,9 @@ def main():
 
             vmask = torch.ones((1, min_t), dtype=torch.bool, device=DEVICE)
 
-            # Predictions
             p_dual = torch.sigmoid(m_dual(h_fused, valid_mask=vmask))[0].cpu().numpy()
             p_peak = torch.sigmoid(m_peak(h_wavlm, valid_mask=vmask))[0].cpu().numpy()
 
-            # Cross-Backbone Ensemble (60% Dual + 40% Peak)
             probs_ens = 0.60 * p_dual + 0.40 * p_peak
 
             clip_faults = {}
@@ -151,7 +126,6 @@ def main():
 
     print(f"\n★ Version 11 successfully packaged to: {OUT_ZIP.resolve()} ({OUT_ZIP.stat().st_size / 1024:.2f} KB)")
 
-    # Strict Verification
     with zipfile.ZipFile(OUT_ZIP, "r") as zf:
         assert zf.namelist() == ["submission.json"], "Archive must contain only submission.json"
         with zf.open("submission.json") as f:

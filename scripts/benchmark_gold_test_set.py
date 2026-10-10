@@ -133,7 +133,6 @@ def main():
     print(f"Device: {DEVICE}")
     print(f"Test Set Folder: {TEST_DIR}")
     
-    # 1. Load Ground Truth
     with open(LABELS_PATH, "r", encoding="utf-8") as f:
         gts = [json.loads(line) for line in f if line.strip()]
     gt_map = {item["file_id"]: item for item in gts}
@@ -142,7 +141,6 @@ def main():
     wav_files = sorted(WAV_DIR.glob("*.wav"))
     assert len(wav_files) == len(gts), f"Số lượng file không khớp: {len(wav_files)} wav vs {len(gts)} gt"
 
-    # 2. Extract WavLM Features
     print("-> Khởi tạo WavLM-Large backbone...")
     backbone = WavLMModel.from_pretrained("microsoft/wavlm-large").eval().to(DEVICE)
     for p in backbone.parameters():
@@ -154,7 +152,6 @@ def main():
 
     durations = [features[g["file_id"]][1] for g in gts]
 
-    # Models to benchmark:
     models_to_test = [
         (
             "Model v1/v2 Fault Head (QualiSpeech SOTA Baseline)",
@@ -176,11 +173,9 @@ def main():
         head, configs = load_model_and_config(ckpt, cfg_path)
         raw_preds = run_inference(head, configs, features)
         
-        # Sort predictions matching gts order
         pred_map = {p["file_id"]: p for p in raw_preds}
         ordered_preds = [pred_map[g["file_id"]] for g in gts]
 
-        # Compute Metrics
         f1_macro, f1_details = compute_f1_macro(ordered_preds, gts)
         iou_macro, iou_details = compute_frame_iou_macro(ordered_preds, gts, durations, EVALUATOR_GRID)
         combined_fault_score = 0.5 * f1_macro + 0.5 * iou_macro

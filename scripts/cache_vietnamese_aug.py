@@ -45,7 +45,6 @@ def main():
     print(f"Target cache folder: {OUT_CACHE}")
     print(f"Device: {DEVICE}")
 
-    # Check already cached
     pending = [p for p in wav_files if not (OUT_CACHE / f"{p.stem}.pt").exists()]
     print(f"Already cached: {len(wav_files) - len(pending)} | Pending: {len(pending)}")
     if not pending:

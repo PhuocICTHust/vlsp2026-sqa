@@ -50,14 +50,12 @@ def apply_spec_augment(x: torch.Tensor, mask: torch.Tensor, is_training: bool = 
     for i in range(b):
         valid_t = int(mask[i].sum().item())
         if valid_t < 10: continue
-        # Time mask: mask 1-2 blocks of 5-15 frames
         n_t_masks = np.random.randint(1, 3)
         for _ in range(n_t_masks):
             t_len = np.random.randint(4, min(16, valid_t // 2))
             t_start = np.random.randint(0, valid_t - t_len)
             x_aug[i, t_start:t_start + t_len, :] = 0.0
 
-        # Channel mask: mask 1-2 blocks of 32-64 channels
         n_c_masks = np.random.randint(1, 3)
         for _ in range(n_c_masks):
             c_len = np.random.randint(32, 65)
@@ -67,7 +65,6 @@ def apply_spec_augment(x: torch.Tensor, mask: torch.Tensor, is_training: bool = 
 
 def compute_boundary_loss(probs: torch.Tensor, targets: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     """Penalize blurry edges by aligning first-order temporal differences."""
-    # probs: [B, T, C], targets: [B, T, C], mask: [B, T]
     diff_p = torch.abs(probs[:, 1:, :] - probs[:, :-1, :])
     diff_t = torch.abs(targets[:, 1:, :] - targets[:, :-1, :])
     valid = (mask[:, 1:] & mask[:, :-1]).unsqueeze(-1).to(probs.dtype)
@@ -79,8 +76,6 @@ class MultiScaleConvModule(nn.Module):
         self.layer_norm = nn.LayerNorm(dim)
         self.pointwise_conv1 = nn.Conv1d(dim, 2 * dim, kernel_size=1)
         
-        # 3 parallel depthwise convolutions for multi-scale context
-        # k=5 (100ms micro-distortion), k=15 (300ms noise), k=31 (620ms pause)
         self.dw_k5 = nn.Conv1d(dim // 4, dim // 4, kernel_size=5, padding=2, groups=dim // 4)
         self.dw_k15 = nn.Conv1d(dim // 2, dim // 2, kernel_size=15, padding=7, groups=dim // 2)
         self.dw_k31 = nn.Conv1d(dim // 4, dim // 4, kernel_size=31, padding=15, groups=dim // 4)
@@ -96,7 +91,6 @@ class MultiScaleConvModule(nn.Module):
         x = self.pointwise_conv1(x)
         x = F.glu(x, dim=1)  # [B, D, T]
 
-        # Multi-scale split
         x5 = self.dw_k5(x[:, :x.shape[1]//4, :])
         x15 = self.dw_k15(x[:, x.shape[1]//4:3*x.shape[1]//4, :])
         x31 = self.dw_k31(x[:, 3*x.shape[1]//4:, :])
@@ -138,15 +132,11 @@ class ConformerProBlock(nn.Module):
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         mask_f = mask.unsqueeze(-1).to(x.dtype)
-        # FFN 1
         x = x + 0.5 * self.ffn1(self.ffn1_norm(x)) * mask_f
-        # Self-Attention
         norm_x = self.attn_norm(x)
         attn_out, _ = self.attn(norm_x, norm_x, norm_x, key_padding_mask=~mask)
         x = (x + self.attn_drop(attn_out)) * mask_f
-        # Multi-scale Conv
         x = self.conv_module(x, mask_f)
-        # FFN 2
         x = x + 0.5 * self.ffn2(self.ffn2_norm(x)) * mask_f
         return self.final_norm(x) * mask_f
 
@@ -180,7 +170,6 @@ def main():
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
-    # Load items
     old_items = []
     with open(OLD_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
@@ -230,7 +219,6 @@ def main():
             m = batch["valid_mask"].to(DEVICE)
             t = batch["targets"].to(DEVICE)
 
-            # SpecAugment on inputs
             h_aug = apply_spec_augment(h, m, p=0.5)
 
             logits = model(h_aug, valid_mask=m)

@@ -57,7 +57,6 @@ FLEURS_BASE = "https://huggingface.co/datasets/google/fleurs/resolve/main/data/v
 PIPER_VOICES = ["vi_VN-vais1000-medium", "vi_VN-25hours_single-low"]   # NOT vi_VN-vivos (VIVOS speakers)
 
 
-# ============================================================================ train exclusion
 def load_train_exclusion(path: str | None) -> dict:
     ex = {"speakers": set(), "paths": set(), "texts": set(), "tts_voices": set()}
     if not path:
@@ -79,7 +78,6 @@ def norm_text(t: str) -> str:
     return re.sub(r"\W+", " ", t.lower()).strip()
 
 
-# ============================================================================ candidates
 def vivos_candidates(root: Path) -> list[dict]:
     rows = []
     for split in ("train", "test"):
@@ -175,7 +173,6 @@ def fleurs_candidates(cache: Path) -> list[dict]:
     return rows
 
 
-# ============================================================================ checks
 def trim_silence(x: np.ndarray, pad_s: float = 0.15) -> np.ndarray:
     r = db(frame_rms(x, 0.01))
     act = np.flatnonzero(r > np.percentile(r, 95) - 35)
@@ -212,7 +209,6 @@ def normalise(x: np.ndarray, target_rms: float = 0.07) -> np.ndarray:
     return (y * (0.95 / pk) if pk > 0.95 else y).astype(np.float32)
 
 
-# ============================================================================ DNSMOS (clean-speech filter)
 DNSMOS_URL = "https://github.com/microsoft/DNS-Challenge/raw/master/DNSMOS/DNSMOS/sig_bak_ovr.onnx"
 _P_SIG = np.poly1d([-0.08397278, 1.22083953, 0.0052439])        # non-personalised mapping, dnsmos_local.py
 _P_BAK = np.poly1d([-0.13166888, 1.60915514, -0.39604546])
@@ -245,7 +241,6 @@ def dnsmos_score(x: np.ndarray) -> tuple[float, float, float]:
     return round(float(m[0]), 2), round(float(m[1]), 2), round(float(m[2]), 2)
 
 
-# ============================================================================ TTS (no edge-tts: used in train)
 def decode_file(p: Path) -> np.ndarray:
     try:
         return load_audio(p)[0]
@@ -397,7 +392,6 @@ def tts_mms(text: str) -> np.ndarray:
     return y.astype(np.float32)
 
 
-# ============================================================================ main
 def main() -> None:
     global FPT_MIN_INTERVAL
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
