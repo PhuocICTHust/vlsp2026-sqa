@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+set -o pipefail
 
 cd /home/svs/audio_exp
 
@@ -23,8 +24,8 @@ echo "======================================================================"
     --csv-path data/qualispeech/train_full.csv \
     --wav-dir data/qualispeech/wav \
     --cache-dir data/qualispeech/hubert_large_cache \
-    --batch-size 8 \
-    --num-workers 4 \
+    --batch-size 4 \
+    --num-workers 0 \
     --normalize-wav 2>&1 | tee outputs/cache_hubert_large.log
 
 echo ""

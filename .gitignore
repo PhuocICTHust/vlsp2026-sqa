@@ -38,6 +38,10 @@ sample_audio/
 
 # Outputs & archives
 outputs/
+submissions/
+review_packs/
+reports/*.html
+reports/*.csv
 *.zip
 
 # OS

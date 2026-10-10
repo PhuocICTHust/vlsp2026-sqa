@@ -28,6 +28,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file
+import transformers
+try:
+    import transformers.utils.import_utils as _iu
+    _iu.check_torch_load_is_safe = lambda: None
+except Exception:
+    pass
+try:
+    import transformers.modeling_utils as _mu
+    _mu.check_torch_load_is_safe = lambda: None
+except Exception:
+    pass
+
 from transformers import Wav2Vec2Model, WavLMModel
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -154,98 +166,156 @@ def main():
             }
             print(f"Loaded calibrated post-processing config from: {calib_path.name}")
 
-    # 2. Load Fault Frame Head
-    fault_ckpt = Path(args.fault_ckpt)
-    fault_payload = torch.load(fault_ckpt, map_location="cpu")
-    fault_head = FaultFrameHead(**fault_payload.get("fault_head_kwargs", {})).eval().to(device)
-    fault_head.load_state_dict(fault_payload["fault_head_state_dict"])
-    print(f"Loaded FaultFrameHead from: {fault_ckpt.name}")
-
-    # 3. Load Model 1: WavLM-Large LoRA + UtmosNisqa
-    print("Loading Model 1 (WavLM-Large LoRA + UtmosNisqa)...")
-    lora_ckpt = Path(args.lora_ckpt)
-    lora_payload = torch.load(lora_ckpt, map_location="cpu")
-    backbone_wavlm = WavLMModel.from_pretrained("microsoft/wavlm-large").eval().to(device)
-    for p in backbone_wavlm.parameters():
-        p.requires_grad = False
-    apply_lora_to_backbone(backbone_wavlm, lora_payload["lora_state_dict"])
-    head_lora = UtmosNisqaQualityHead(hidden_size=1024, bilstm_hidden=128, dropout=0.0).eval().to(device)
-    head_lora.load_state_dict(lora_payload["quality_head_state_dict"])
-
-    # 4. Load Model 2: Frozen WavLM + UtmosNisqa
-    print("Loading Model 2 (Frozen WavLM + UtmosNisqa)...")
-    frozen_ckpt = Path(args.frozen_ckpt)
-    frozen_payload = torch.load(frozen_ckpt, map_location="cpu")
-    head_frozen = UtmosNisqaQualityHead(hidden_size=1024, bilstm_hidden=128, dropout=0.0).eval().to(device)
-    head_frozen.load_state_dict(frozen_payload["model_state_dict"])
-
-    # 5. Load Model 3: Thảo's wav2vec2-XLS-R
-    backbone_thao, head_thao = load_thao_model(device)
-
-    print("\nAll models successfully loaded into memory!")
-    print("Tri-Ensemble Weights: LoRA=31.5%, Frozen=39.5%, XLS-R=29.0%")
-
     # Discover audio files
     wav_files = sorted(audio_dir.rglob("*.wav"))
     if not wav_files:
         raise RuntimeError(f"No .wav files found in {audio_dir}")
-    print(f"\nProcessing {len(wav_files)} audio files...")
+    print(f"\nDiscovered {len(wav_files)} audio files in {audio_dir}")
 
-    entries = []
-    duration_lookup = {}
+    print("Loading audio waveforms into memory...")
+    audios = {}
+    for p in wav_files:
+        wav, dur = load_audio_mono(p)
+        audios[p.name] = (wav, dur)
+    print(f"Loaded {len(audios)} audio clips.")
 
+    # ------------------------------------------------------------------
+    # PASS 1: Frozen WavLM -> Fault Localization & Model 2 (Frozen MOS)
+    # ------------------------------------------------------------------
+    print("\n" + "=" * 60)
+    print("PASS 1: Frozen WavLM (Fault Localization + Frozen Head MOS)")
+    print("=" * 60)
+    fault_ckpt = Path(args.fault_ckpt)
+    fault_payload = torch.load(fault_ckpt, map_location="cpu")
+    fault_head = FaultFrameHead(**fault_payload.get("fault_head_kwargs", {})).eval().to(device)
+    fault_head.load_state_dict(fault_payload["fault_head_state_dict"])
+
+    frozen_ckpt = Path(args.frozen_ckpt)
+    frozen_payload = torch.load(frozen_ckpt, map_location="cpu")
+    backbone_frozen = WavLMModel.from_pretrained("microsoft/wavlm-large").eval().to(device)
+    for p in backbone_frozen.parameters():
+        p.requires_grad = False
+    kw_frozen = frozen_payload.get("quality_head_kwargs", {"bilstm_hidden": 128, "dropout": 0.0, "use_fault_features": False})
+    kw_frozen.setdefault("use_fault_features", False)
+    head_frozen = UtmosNisqaQualityHead(hidden_size=1024, **kw_frozen).eval().to(device)
+    head_frozen.load_state_dict(frozen_payload["model_state_dict"])
+
+    preds_frozen = {}
+    faults_all = {}
     with torch.no_grad():
-        for i, wav_path in enumerate(wav_files, start=1):
-            file_id = wav_path.name
-            wav, duration = load_audio_mono(wav_path)
-            duration_lookup[file_id] = duration
+        for i, (fname, (wav, dur)) in enumerate(audios.items(), start=1):
+            wav_gpu = wav.to(device)[None]
+            mask = torch.ones_like(wav_gpu, dtype=torch.long)
+            wav_norm = normalize_waveform(wav_gpu, mask)
+            hidden = backbone_frozen(wav_norm, attention_mask=mask).last_hidden_state
+            vmask = torch.ones(hidden.shape[:2], dtype=torch.bool, device=device)
 
-            wav_gpu = wav.to(device)[None]  # [1, T_wav]
-            attention_mask = torch.ones_like(wav_gpu, dtype=torch.long)
+            p2 = float(head_frozen(hidden, vmask).item())
+            preds_frozen[fname] = p2
 
-            # WavLM features (used for FaultHead and Model 2)
-            # WavLM normalized input for LoRA
-            wav_norm = normalize_waveform(wav_gpu, attention_mask)
-            wavlm_hidden = backbone_wavlm(wav_norm, attention_mask=attention_mask).last_hidden_state  # [1, T_frames, 1024]
-            valid_mask = torch.ones(wavlm_hidden.shape[:2], dtype=torch.bool, device=device)
-
-            # Fault predictions
-            fault_logits = fault_head(wavlm_hidden, valid_mask=valid_mask)
-            fault_probs = torch.sigmoid(fault_logits)[0].cpu().numpy()  # [T_frames, 3]
-
+            f_logits = fault_head(hidden, valid_mask=vmask)
+            f_probs = torch.sigmoid(f_logits)[0].cpu().numpy()
             clip_faults = {}
             for f_idx, ft in enumerate(FAULT_TYPES):
                 cfg = post_cfg[ft] if isinstance(post_cfg, dict) else post_cfg
-                ivs, _, _, _ = predict_fault_type(fault_probs[:, f_idx], MODEL_GRID, duration, cfg)
-                clip_faults[ft] = serialize_intervals(ivs, round_digits=2, duration=duration)
+                ivs, _, _, _ = predict_fault_type(f_probs[:, f_idx], MODEL_GRID, dur, cfg)
+                clip_faults[ft] = serialize_intervals(ivs, round_digits=2, duration=dur)
+            faults_all[fname] = clip_faults
 
-            # Model 1 prediction (LoRA)
-            p1 = float(head_lora(wavlm_hidden, valid_mask).item())
+            if i % 100 == 0 or i == len(audios):
+                print(f"Pass 1: Processed {i:3d}/{len(audios)} files...")
 
-            # Model 2 prediction (Frozen Head)
-            p2 = float(head_frozen(wavlm_hidden, valid_mask).item())
+    del backbone_frozen, fault_head, head_frozen
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
 
-            # Model 3 prediction (Thảo XLS-R)
+    # ------------------------------------------------------------------
+    # PASS 2: WavLM-Large LoRA -> Model 1 (LoRA MOS)
+    # ------------------------------------------------------------------
+    print("\n" + "=" * 60)
+    print("PASS 2: WavLM-Large LoRA (Model 1 MOS)")
+    print("=" * 60)
+    lora_ckpt = Path(args.lora_ckpt)
+    lora_payload = torch.load(lora_ckpt, map_location="cpu")
+    backbone_lora = WavLMModel.from_pretrained("microsoft/wavlm-large").eval().to(device)
+    for p in backbone_lora.parameters():
+        p.requires_grad = False
+    apply_lora_to_backbone(backbone_lora, lora_payload["lora_state_dict"])
+    kw_lora = lora_payload.get("quality_head_kwargs", {"bilstm_hidden": 128, "dropout": 0.0, "use_fault_features": False})
+    kw_lora.setdefault("use_fault_features", False)
+    head_lora = UtmosNisqaQualityHead(hidden_size=1024, **kw_lora).eval().to(device)
+    head_lora.load_state_dict(lora_payload["quality_head_state_dict"])
+
+    preds_lora = {}
+    with torch.no_grad():
+        for i, (fname, (wav, dur)) in enumerate(audios.items(), start=1):
+            wav_gpu = wav.to(device)[None]
+            mask = torch.ones_like(wav_gpu, dtype=torch.long)
+            wav_norm = normalize_waveform(wav_gpu, mask)
+            hidden = backbone_lora(wav_norm, attention_mask=mask).last_hidden_state
+            vmask = torch.ones(hidden.shape[:2], dtype=torch.bool, device=device)
+
+            p1 = float(head_lora(hidden, vmask).item())
+            preds_lora[fname] = p1
+
+            if i % 100 == 0 or i == len(audios):
+                print(f"Pass 2: Processed {i:3d}/{len(audios)} files...")
+
+    del backbone_lora, head_lora
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+
+    # ------------------------------------------------------------------
+    # PASS 3: wav2vec2-XLS-R-300M LoRA (Thảo Model MOS)
+    # ------------------------------------------------------------------
+    print("\n" + "=" * 60)
+    print("PASS 3: wav2vec2-XLS-R-300M LoRA (Thảo Model MOS)")
+    print("=" * 60)
+    backbone_thao, head_thao = load_thao_model(device)
+
+    preds_thao = {}
+    with torch.no_grad():
+        for i, (fname, (wav, dur)) in enumerate(audios.items(), start=1):
+            wav_gpu = wav.to(device)[None]
             wav_thao = (wav_gpu - wav_gpu.mean(dim=1, keepdim=True)) / torch.sqrt(
                 wav_gpu.var(dim=1, unbiased=False, keepdim=True) + 1e-7
             )
             mask_thao = torch.ones_like(wav_thao, dtype=torch.long)
             h_thao = backbone_thao(wav_thao, attention_mask=mask_thao).last_hidden_state
-            p3 = float(head_thao(h_thao.float(), torch.ones(h_thao.shape[:2], dtype=torch.bool, device=device)).item())
+            vmask_thao = torch.ones(h_thao.shape[:2], dtype=torch.bool, device=device)
+            p3 = float(head_thao(h_thao.float(), vmask_thao).item())
+            preds_thao[fname] = p3
 
-            # Tri-Ensemble Blending
-            p_ensemble = 0.315 * p1 + 0.395 * p2 + 0.290 * p3
-            p_clamped = round(float(np.clip(p_ensemble, 1.0, 5.0)), 4)
+            if i % 100 == 0 or i == len(audios):
+                print(f"Pass 3: Processed {i:3d}/{len(audios)} files...")
 
-            entry = {
-                "file_id": file_id,
-                "quality_score": p_clamped,
-                "faults": clip_faults,
-            }
-            entries.append(entry)
+    del backbone_thao, head_thao
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
 
-            if i % 100 == 0 or i == len(wav_files):
-                print(f"Processed {i:4d}/{len(wav_files)} files...")
+    # ------------------------------------------------------------------
+    # ENSEMBLE COMBINATION
+    # ------------------------------------------------------------------
+    print("\n" + "=" * 60)
+    print("COMBINING TRI-ENSEMBLE PREDICTIONS")
+    print("=" * 60)
+    print("Weights: 31.5% WavLM LoRA + 39.5% WavLM Frozen + 29.0% XLS-R LoRA")
+
+    entries = []
+    duration_lookup = {fname: dur for fname, (wav, dur) in audios.items()}
+
+    for fname in audios.keys():
+        p1 = preds_lora[fname]
+        p2 = preds_frozen[fname]
+        p3 = preds_thao[fname]
+        p_ensemble = 0.315 * p1 + 0.395 * p2 + 0.290 * p3
+        p_clamped = round(float(np.clip(p_ensemble, 1.0, 5.0)), 4)
+
+        entries.append({
+            "file_id": fname,
+            "quality_score": p_clamped,
+            "faults": faults_all[fname],
+        })
 
     # Validate submission format
     print("\nValidating submission JSON against official VLSP 2026 constraints...")

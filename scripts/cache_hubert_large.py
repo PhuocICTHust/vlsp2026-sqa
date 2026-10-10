@@ -60,8 +60,8 @@ def main():
     parser.add_argument("--csv-path", type=str, default="data/qualispeech/train_full.csv")
     parser.add_argument("--wav-dir", type=str, default="data/qualispeech/wav")
     parser.add_argument("--cache-dir", type=str, default="data/qualispeech/hubert_large_cache")
-    parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--normalize-wav", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 
@@ -108,7 +108,9 @@ def main():
     for param in backbone.parameters():
         param.requires_grad = False
 
-    dataset = QualiSpeechDataset(csv_path=pending_df, wav_dir=wav_dir)
+    pending_csv = cache_dir / "_pending_cache.csv"
+    pending_df.to_csv(pending_csv, index=False)
+    dataset = QualiSpeechDataset(csv_path=pending_csv, wav_dir=wav_dir)
     loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -122,7 +124,7 @@ def main():
     saved_count = 0
 
     with torch.no_grad():
-        for batch in tqdm(loader, desc="Caching HuBERT-Large"):
+        for batch_idx, batch in enumerate(tqdm(loader, desc="Caching HuBERT-Large")):
             wav = batch["wav"].to(device, non_blocking=True)
             attention_mask = batch["attention_mask"].to(device, non_blocking=True)
             fids = batch["file_id"]
@@ -152,6 +154,14 @@ def main():
                     "file_id": clean_fid,
                 }, out_path)
                 saved_count += 1
+
+            del wav, attention_mask, hidden, valid_mask
+            if batch_idx % 20 == 0:
+                if device.type == "cuda":
+                    torch.cuda.empty_cache()
+
+    if pending_csv.exists():
+        pending_csv.unlink()
 
     print(f"\nFinished! Successfully cached {saved_count:,} new files in: {cache_dir}")
 
