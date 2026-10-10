@@ -234,7 +234,7 @@ Predictions strictly conform to the format published by the VLSP 2026 committee:
 ## 8. Authors & Acknowledgments
 
 * **Team**: `anhtraiAI`
-* **Affiliation**: Hanoi University of Science and Technology (HUST)
+* **Affiliation**: HuSTek Lab, Hanoi University of Science and Technology (HUST)
 * **Competition**: VLSP 2026 Evaluation Campaign — Vietnamese Language and Speech Processing.
 
-We express our gratitude to the organizers of VLSP 2026 for providing the evaluation benchmarks, and to the open-source community for pretrained models (`microsoft/wavlm-large`, `facebook/wav2vec2-xls-r-300m`).
+We express our gratitude to the organizers of VLSP 2026 for providing the evaluation benchmarks, to HuSTek Lab (HUST) for computational hardware and infrastructure support, and to the open-source community for pretrained models (`microsoft/wavlm-large`, `facebook/wav2vec2-xls-r-300m`).
