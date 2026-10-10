@@ -1,4 +1,4 @@
-"""ModelFrameGrid: trục thời gian thật của frame WavLM. EvaluatorGrid: lưới 20 ms của BTC."""
+"""ModelFrameGrid: frame geometry and time-axis mappings."""
 from __future__ import annotations
 
 import math
@@ -14,9 +14,9 @@ FRAME_INDEX_EPS = 1e-6
 
 
 def conv_stack_geometry(kernels=WAVLM_CONV_KERNELS, strides=WAVLM_CONV_STRIDES) -> tuple[int, int]:
-    """(stride tổng, receptive field) tính bằng sample."""
+    """Compute total stride and receptive field in samples."""
     if len(kernels) != len(strides):
-        raise ValueError(f"kernels/strides lệch độ dài: {kernels} vs {strides}")
+        raise ValueError(f"Length mismatch: {kernels} vs {strides}")
     rf, jump = 1, 1
     for k, s in zip(kernels, strides):
         rf += (k - 1) * jump
@@ -77,7 +77,7 @@ def intervals_to_model_frame_targets(
     n_frames: int,
     grid: ModelFrameGrid,
 ) -> np.ndarray:
-    """Interval (giây) -> target [n_frames], cùng quy ước floor/ceil với evaluator."""
+    """Convert time intervals (seconds) to frame targets [n_frames]."""
     target = np.zeros(n_frames, dtype=np.float32)
     for start, end in intervals:
         if not end > start:

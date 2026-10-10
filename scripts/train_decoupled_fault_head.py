@@ -62,7 +62,7 @@ class DecoupledFaultHead(nn.Module):
         self.input_dim = input_dim
         self.in_norm = nn.LayerNorm(input_dim)
 
-        # 1. Nhánh Distortion (Vi mô: kernel 3, dilations 1, 2)
+        # 1. Distortion branch (short receptive field)
         self.dist_proj = nn.Linear(input_dim, branch_dim)
         self.dist_blocks = nn.ModuleList([
             _ConvBlock(branch_dim, kernel_size=3, dilation=1),
@@ -70,7 +70,7 @@ class DecoupledFaultHead(nn.Module):
         ])
         self.dist_out = nn.Linear(branch_dim, 1)
 
-        # 2. Nhánh Noise (Nền: kernel 7, dilations 1, 2, 4)
+        # 2. Noise branch (dilated conv)
         self.noise_proj = nn.Linear(input_dim, branch_dim)
         self.noise_blocks = nn.ModuleList([
             _ConvBlock(branch_dim, kernel_size=7, dilation=1),
@@ -79,7 +79,7 @@ class DecoupledFaultHead(nn.Module):
         ])
         self.noise_out = nn.Linear(branch_dim, 1)
 
-        # 3. Nhánh Pause (Ngữ cảnh dài: BiLSTM 64-d)
+        # 3. Pause branch (BiLSTM)
         self.pause_proj = nn.Linear(input_dim, branch_dim)
         self.pause_lstm = nn.LSTM(branch_dim, 64, batch_first=True, bidirectional=True)
         self.pause_out = nn.Linear(128, 1)

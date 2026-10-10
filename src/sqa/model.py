@@ -181,23 +181,23 @@ class UtmosNisqaQualityHead(nn.Module):
         valid_mask: [B, T] bool
         fault_probs: [B, T, n_fault_types] optional (probabilities from FaultFrameHead)
         """
-        # Step 1: BiLSTM temporal contextualization
+        # BiLSTM temporal feature extraction
         lstm_out = self._run_bilstm(h, valid_mask)  # [B, T, lstm_out_dim]
 
-        # Step 2: Attention weighting
+        # Attention pooling weights
         scores = self.attn_proj(lstm_out).squeeze(-1)  # [B, T]
         if valid_mask is not None:
             scores = scores.masked_fill(~valid_mask, float("-inf"))
         weights = F.softmax(scores, dim=1).unsqueeze(-1)  # [B, T, 1]
 
-        # Step 3: Mean & Std statistics pooling
+        # Weighted statistics pooling
         mean = (weights * lstm_out).sum(dim=1)  # [B, lstm_out_dim]
         diff_sq = (lstm_out - mean.unsqueeze(1)).pow(2)
         var = (weights * diff_sq).sum(dim=1)  # [B, lstm_out_dim]
         std = torch.sqrt(var.clamp_min(1e-7))
         pooled = torch.cat([mean, std], dim=-1)  # [B, lstm_out_dim * 2]
 
-        # Step 4: NISQA fault statistics injection
+        # Auxiliary fault feature injection
         if self.use_fault_features:
             if fault_probs is not None:
                 if valid_mask is not None:

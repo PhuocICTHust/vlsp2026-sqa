@@ -192,7 +192,7 @@ def evaluate_fault_head(head: FaultFrameHead, loader: DataLoader, post_cfg=BASEL
 
 
 def calibrate_thresholds(head: FaultFrameHead, loader: DataLoader):
-    print("\n--- BẮT ĐẦU CÂN CHỈNH NGƯỠNG HẬU XỬ LÝ (POST-PROCESSING CALIBRATION) ---")
+    print("\n--- Post-Processing Calibration ---")
     threshold_cands = [0.20, 0.25, 0.30, 0.35, 0.40]
     min_dur_cands = [0.10, 0.15, 0.20]
     merge_gap_cands = [0.10, 0.15, 0.20]
@@ -239,7 +239,7 @@ def main():
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
-    # 1. Thu thập 1,000 files tập cũ
+    # 1. Load partition 1
     old_items = []
     with open(OLD_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
@@ -257,7 +257,7 @@ def main():
                 })
     print(f"-> Đã nạp từ tập cũ: {len(old_items)} files.")
 
-    # 2. Thu thập 1,000 files tập mới
+    # 2. Load partition 2
     new_items = []
     with open(NEW_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
@@ -278,7 +278,7 @@ def main():
     all_train_items = old_items + new_items
     print(f"Tổng cộng mẫu huấn luyện: {len(all_train_items)} FILES tiếng Việt.")
 
-    # 3. Thu thập 125 files tập test
+    # 3. Load validation set
     test_items = []
     with open(TEST_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:

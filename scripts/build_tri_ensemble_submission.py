@@ -266,7 +266,7 @@ def main():
         torch.cuda.empty_cache()
 
     # ------------------------------------------------------------------
-    # PASS 3: wav2vec2-XLS-R-300M LoRA (Thảo Model MOS)
+    # PASS 3: wav2vec2-XLS-R-300M LoRA MOS
     # ------------------------------------------------------------------
     print("\n" + "=" * 60)
     print("PASS 3: wav2vec2-XLS-R-300M LoRA (Thảo Model MOS)")

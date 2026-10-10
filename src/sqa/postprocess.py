@@ -10,7 +10,7 @@ from .frame_grid import ModelFrameGrid
 
 @dataclass(frozen=True)
 class PostProcessConfig:
-    """Mọi tham số hậu xử lý. Mặc định = baseline thuần."""
+    """Post-processing configuration for predicted fault intervals."""
     tau_frame: float = 0.5
     min_duration: float = 0.0
     merge_gap: float = 0.0
@@ -97,7 +97,7 @@ def normalize_intervals(
 def serialize_intervals(
     intervals: list[list[float]], round_digits: int = 2, duration: float | None = None
 ) -> list[list[float]]:
-    """end == duration giữ nguyên, không làm tròn (tránh mất frame cuối)."""
+    """Serialize interval timestamps to list of floats."""
     out = []
     for s, e in intervals:
         s_out = round(s, round_digits)
@@ -174,7 +174,7 @@ def frame_probs_to_intervals(
     if start is not None:
         runs.append((start, len(binary)))
 
-    # WavLM thiếu frame cho 5-25 ms cuối file -> run chạm frame cuối kéo tới duration
+    # Extend tail interval to file duration if within boundary
     n = len(binary)
     tail_end = n * grid.frame_hop_sec + grid.offset_sec
     extend_tail = 0.0 <= duration - tail_end < 2 * grid.frame_hop_sec

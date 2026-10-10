@@ -73,7 +73,7 @@ def main():
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
-    # 1. Load MOS from submission_v5.json (Tri-Ensemble v2 SOTA)
+    # Load MOS predictions from base submission
     if not SUB_V5_PATH.exists():
         raise FileNotFoundError(f"Missing {SUB_V5_PATH}")
     with open(SUB_V5_PATH, "r", encoding="utf-8") as f:

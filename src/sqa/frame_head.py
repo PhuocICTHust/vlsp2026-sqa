@@ -167,7 +167,7 @@ def topk_presence(
     k_ratio: float = 0.05,
     min_k: int = 3,
 ) -> torch.Tensor:
-    """Bản torch của postprocess.presence_from_frames: [B,T,C] -> [B,C]."""
+    """Torch implementation of presence score pooling: [B, T, C] -> [B, C]."""
     if frame_probs.dim() != 3:
         raise ValueError(f"need [B, T, C], received {tuple(frame_probs.shape)}")
     b, t, _ = frame_probs.shape
