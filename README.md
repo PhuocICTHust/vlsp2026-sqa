@@ -180,5 +180,5 @@ python scripts/package_submission.py --team-name anhtraiAI --attempt 4 --submiss
 
 ## 7. Authors & Acknowledgments
 
-* **Team**: `anhtraiAI` — Phuoc Duc Pham, Thao Do Minh Vu, Dat Tien Nguyen, Hieu Trung Tran, Kien Hoang Le, Nhat Tran Minh Nguyen, Hoang Duc Nguyen, Dien Huy Nguyen, Nguyen Duc Thang.
+* **Team**: `anhtraiAI` — Phuoc Duc Pham (Corresponding author: `phuoc.pd235988@sis.hust.edu.vn`), Thao Do Minh Vu, Dat Tien Nguyen, Hieu Trung Tran, Kien Hoang Le, Hoang Duc Nguyen, Nhat Tran Minh Nguyen, Dien Huy Nguyen, Nguyen Duc Thang.
 * **Affiliation**: HuSTek Lab & School of Information and Communication Technology (SoICT), Hanoi University of Science and Technology (HUST), Hanoi, Vietnam.
