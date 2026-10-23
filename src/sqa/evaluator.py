@@ -22,7 +22,7 @@ class MetricPolicy:
     epsilon: float = 1e-8
 
 
-DEFAULT_POLICY = MetricPolicy()  # thay bằng policy đã xác nhận ngay khi có evaluator BTC
+DEFAULT_POLICY = MetricPolicy()
 
 
 def intervals_to_frame_mask(intervals, duration: float, grid: EvaluatorGrid) -> np.ndarray:

@@ -49,3 +49,6 @@ reports/*.csv
 
 # Paper drafts (keep local, do not push to public repo)
 paper/
+
+# Scratch & exploratory scripts
+scratch/

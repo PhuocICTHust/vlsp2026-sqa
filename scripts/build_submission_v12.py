@@ -1,4 +1,7 @@
-"""Submission generator for build_submission_v12."""
+"""Submission generator for Official Run 5 (anhtraiAI_5.zip / submission_v12.json).
+Vietnamese Synthetic Dev Set (125 clips) Fault Avg: 88.32% (per-run) / 87.52% (shared), Composite Dev Score: 0.8229.
+Official Private Test Final Score: 0.525695.
+"""
 
 import json
 import sys
@@ -48,11 +51,17 @@ def load_audio_mono(audio_path: Path, target_sr: int = 16000) -> tuple[torch.Ten
 
 def main():
     print("=" * 80)
-    print("BUILDING SUBMISSION VERSION 12: SUPER 4-MODEL CROSS-BACKBONE")
+    print("BUILDING OFFICIAL RUN 5 (anhtraiAI_5 / submission_v12.json) - 0.8229 COMPOSITE DEV / 0.525695 PRIVATE TEST")
     print("=" * 80)
     print(f"Device: {DEVICE}")
 
-    with open(SUB_V5_PATH, "r", encoding="utf-8") as f:
+    mos_source_path = SUB_V5_PATH if SUB_V5_PATH.exists() else ROOT / "submissions" / "submission_v2.json"
+    if not mos_source_path.exists():
+        raise FileNotFoundError(
+            f"Missing MOS source file ({SUB_V5_PATH} or submissions/submission_v2.json). "
+            "Run scripts/build_upgraded_tri_ensemble_submission.py first."
+        )
+    with open(mos_source_path, "r", encoding="utf-8") as f:
         v5_data = json.load(f)
     mos_dict = {it["file_id"]: it["quality_score"] for it in v5_data}
 
@@ -134,7 +143,7 @@ def main():
     with zipfile.ZipFile(OUT_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(OUT_JSON, arcname="submission.json")
 
-    print(f"\n★ Version 12 successfully packaged to: {OUT_ZIP.resolve()} ({OUT_ZIP.stat().st_size / 1024:.2f} KB)")
+    print(f"\nVersion 12 (Official Run 5) successfully packaged to: {OUT_ZIP.resolve()} ({OUT_ZIP.stat().st_size / 1024:.2f} KB)")
 
     with zipfile.ZipFile(OUT_ZIP, "r") as zf:
         assert zf.namelist() == ["submission.json"], "Archive must contain only submission.json"

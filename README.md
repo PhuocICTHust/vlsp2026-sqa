@@ -1,89 +1,76 @@
 # VLSP 2026 — Speech Quality Assessment (SQA)
 
-Official system repository of team **anhtraiAI** for the **VLSP 2026 Speech Quality Assessment** evaluation campaign.
+Official system repository of team **anhtraiAI** (HuSTek Lab & SoICT, Hanoi University of Science and Technology) for the **VLSP 2026 Speech Quality Assessment** shared task.
 
-This repository provides an end-to-end research framework for no-reference speech quality assessment, jointly addressing **perceptual quality estimation (MOS)** and **fine-grained temporal fault localization** (Noise, Distortion, Unnatural Pause).
+This repository provides a reproducible framework for no-reference speech quality assessment, jointly addressing **utterance-level perceptual quality estimation (MOS)** and **millisecond-level temporal fault localization** (`noise`, `distortion`, `unnatural_pause`).
 
 ---
 
 ## 1. Task Description & Competition Metric
 
-The task requires evaluating degraded speech audio files without clean reference signals across two coupled sub-tasks:
+Given a degraded 16 kHz mono speech recording without a clean reference signal, the system predicts:
 
-1. **Perceptual Quality Score ($Q \in [1.0, 5.0]$)**: Utterance-level subjective score predicting Mean Opinion Score (MOS).
-2. **Temporal Fault Localization**: Detecting the presence and predicting millisecond-accurate time boundaries $[t_{\text{start}}, t_{\text{end}}]$ for three degradation types:
+1. **Perceptual Quality Score ($Q \in [1.0, 5.0]$)**: Utterance-level Mean Opinion Score (MOS).
+2. **Temporal Fault Localization**: Presence and time intervals $[t_{\text{start}}, t_{\text{end}}]$ in seconds for three fault categories:
    * `noise`: Background noise, babble, music, or environmental interference.
-   * `distortion`: Acoustic clipping, vocoder artifacts, packet loss, or harmonic distortion.
-   * `unnatural_pause`: Abnormal silent intervals or speech disfluencies.
+   * `distortion`: Clipping, codec/vocoder artifacts, crackle, or packet loss.
+   * `unnatural_pause`: Abnormal silent intervals or mid-clause speech disfluencies.
 
 ### Official Evaluation Formula
-The overall ranking metric is defined as:
-
 $$\text{Final Score} = 0.40 \times \text{PCC}_{\text{MOS}} + 0.30 \times \text{F1}_{\text{macro}} + 0.30 \times \text{IoU}_{\text{macro}}$$
 
-* $\text{PCC}_{\text{MOS}}$: Pearson Correlation Coefficient between predicted quality scores and ground truth ratings.
-* $\text{F1}_{\text{macro}}$: Macro-averaged file-level F1 score across the three fault classes (excluding the "no fault" class).
-* $\text{IoU}_{\text{macro}}$: Macro-averaged temporal Intersection-over-Union calculated over a 20ms binary frame grid on positive samples.
+* $\text{PCC}_{\text{MOS}}$: Pearson Correlation Coefficient between predicted and ground-truth MOS across all test utterances.
+* $\text{F1}_{\text{macro}}$: Unweighted macro-averaged binary clip-level F1 score across the three fault classes.
+* $\text{IoU}_{\text{macro}}$: Unweighted macro-averaged frame-level Intersection-over-Union on a 20 ms grid, evaluated conditionally on ground-truth positive recordings for each fault class.
 
 ---
 
 ## 2. System Architecture
 
 ```text
-                             Raw Audio Waveform (16kHz Mono)
-                                       │
-                      ┌────────────────┴────────────────┐
-                      ▼                                 ▼
-             Microsoft WavLM-Large            Meta wav2vec2-XLS-R-300M
-          (Acoustic / Physical Latents)     (Multilingual & Phonetic Latents)
-                      │                                 │
-                      └────────────────┬────────────────┘
-                                       ▼
-                       Fused Representations [T, 2048]
-                                       │
-         ┌─────────────────────────────┴─────────────────────────────┐
-         ▼                                                           ▼
-┌─────────────────────────────────┐         ┌─────────────────────────────────┐
-│     Quality Regression Head     │         │   Temporal Fault Localization   │
-│         (40% of Score)          │         │         (60% of Score)          │
-├─────────────────────────────────┤         ├─────────────────────────────────┤
-│ • Tri-Ensemble MOS Fusion       │         │ • Super 4-Model Heterogeneous   │
-│ • SLSQP Optimal Convex Weights: │         │   Ensemble (2048-dim + 1024-dim)│
-│   - 24.7% WavLM-Large LoRA      │         │ • Peak Conformer (Micro-spikes) │
-│   - 36.4% Frozen WavLM-Large    │         │ • Conformer-Pro (Multi-scale)   │
-│   - 38.9% Meta XLS-R 300M Utmos │         │ • Decoupled Tri-Branch (TCN/RNN)│
-│ • Attention Statistics Pooling  │         │ • Dual Conformer (Cross-domain) │
-└────────────────┬────────────────┘         └────────────────┬────────────────┘
-                 ▼                                           ▼
-      Predicted Quality Score                    Per-Class Dynamic Hysteresis
-            [1.0, 5.0]                          Boundary Dilation & Gap Merging
-                 │                                           │
-                 └─────────────────────┬─────────────────────┘
-                                       ▼
-                         Official Submission Package
-                          (PCC ~0.94, F1 ~0.90, IoU ~0.86)
+                             Raw Audio Waveform (16 kHz Mono)
+                                        │
+                       ┌────────────────┴────────────────┐
+                       ▼                                 ▼
+              Microsoft WavLM-Large            Meta wav2vec2-XLS-R-300M
+           (1024-d Acoustic Latents)         (1024-d Multilingual Latents)
+                       │                                 │
+                       ├────────────────┬────────────────┤
+                       ▼                                 ▼
+┌───────────────────────────────────────┐ ┌───────────────────────────────────────┐
+│      SLSQP Tri-Ensemble MOS Head      │ │   Temporal Fault Localization Heads   │
+│         (40% of Final Score)          │ │         (60% of Final Score)          │
+├───────────────────────────────────────┤ ├───────────────────────────────────────┤
+│ • BiLSTM (d=128) + Attention Stat Pool│ │ • Dual Conformer (2048-d Fused, k=15) │
+│ • SLSQP Convex Weights (QualiSpeech): │ │ • WavLM Conformer & Peak (1024-d,k=15)│
+│   - 24.7% WavLM-Large LoRA (r=16,α=32)│ │ • Conformer-Pro (k ∈ {5, 15, 31})     │
+│   - 36.4% Frozen WavLM-Large ASP      │ │ • Decoupled Tri-Branch (TCN + BiLSTM) │
+│   - 38.9% XLS-R-300M ASP              │ │ • Loss: Focal + 0.5 SoftIoU + 0.2 Pres│
+└──────────────────┬────────────────────┘ └──────────────────┬────────────────────┘
+                   ▼                                         ▼
+        Predicted Quality Score                  Per-Class Two-Tier Hysteresis
+              [1.0, 5.0]                        [τ_high, τ_low, g_merge, d_min]
 ```
 
-### Core Innovations
-1. **Cross-Backbone Dual Foundation (2048-dim)**: Combining Microsoft `WavLM-Large` (robust acoustic corruption latents) and Meta `XLS-R-300M` (cross-lingual phonetic representations) eliminates Vietnamese tonal false alarms.
-2. **Decoupled Tri-Branch Architecture**: Separating the receptive fields for distinct degradation types (short receptive fields for localized distortion, dilated convolutions for background noise, and bidirectional recurrent units for unnatural pauses).
-3. **Multi-Scale Conformer Decoding**: Utilizing Depthwise Separable Convolutions and Relative Multi-Head Self-Attention for sub-second boundary precision.
-4. **Metric-Aligned Temporal Post-Processing**: Dual-threshold hysteresis ($\tau_{\text{high}}, \tau_{\text{low}}$) paired with dynamic boundary dilation directly maximizes the discrete Jaccard IoU metric.
-5. **SLSQP-Optimized Quality Ensemble**: Constrained convex optimization over out-of-fold validation predictions yields Pearson correlation $\text{PCC} > 0.94$.
+### Core Components
+1. **SLSQP-Blended Tri-Ensemble MOS Head**: Combines three 1024-d Attention-weighted Statistics Pooling (ASP) models trained on English `QualiSpeech` (`trainval`, 12,725 clips): (i) `WavLM-Large` fine-tuned with LoRA ($r=16, \alpha=32$) and a composite MSE+CCC+PCC+Ranking objective, (ii) frozen `WavLM-Large` ASP, and (iii) `wav2vec2-XLS-R-300M` ASP (publicly hosted at [`vdmhth123/vlsp2026-sqa-wav2vec2-xls-r-300m-utmos-trainval`](https://huggingface.co/vdmhth123/vlsp2026-sqa-wav2vec2-xls-r-300m-utmos-trainval)). Convex weights ($0.247, 0.364, 0.389$) fit on the 1,852-clip held-out `QualiSpeech` test split achieve $\text{PCC}_{\text{MOS}} = 0.7325$ on `QualiSpeech` test and $0.7031$ zero-shot on the Vietnamese Private Test.
+2. **Cross-Backbone Dual Foundation Latents (2048-dim)**: Concatenating frame-level `WavLM-Large` (1024-d) and `XLS-R-300M` (1024-d) representations allows the Conformer decoder to jointly model physical channel degradations and Vietnamese tonal phonetics.
+3. **Heterogeneous Localization Decoders**: Combines standard `Conformer` ($k=15$, 10-epoch and 25-epoch Peak checkpoints), `Conformer-Pro` (parallel depthwise convolutions $k \in \{5, 15, 31\}$), `DualBackboneConformer` (2048-d), and `DecoupledFaultHead` (dedicated $k=3$ CNN for distortion, dilated $k=7$ TCN for noise, and BiLSTM for pause).
+4. **Programmatic Vietnamese Degradation Engine**: Synthesizes 2,000 training utterances (`vietnamese_aug` + `vietnamese_aug_v3/train`) and a 125-clip Vietnamese development benchmark (`vietnamese_test_v1`) from clean Vietnamese speech (`VIVOS`, `Common Voice`, `FLEURS`, and TTS) with exact programmatic interval labels and 422 ($21.1\%$) clean negative anchors.
 
 ---
 
-## 3. Official Submissions Portfolio
+## 3. Official Competition Submissions & Results (Private Test: 302 Clips)
 
-To hedge against evaluation distribution shift, five complementary system paradigms were packaged and submitted:
+All five official submissions share the same Tri-Ensemble MOS predictions ($\text{PCC}_{\text{MOS}} = 0.703140$, stored in `submissions/submission_v2.json` and `submissions/submission_v5.json`).
 
-| Submission Package | Baseline / Model Strategy | Key Characteristics | Target Scenario |
-| :--- | :--- | :--- | :--- |
-| **`anhtraiAI_1.zip`** | Tri-Ensemble MOS + Starter Baseline | Calibrated MOS ($0.94$ PCC) paired with baseline floor | System control & baseline anchor |
-| **`anhtraiAI_2.zip`** | Decoupled Tri-Branch (TCN + BiLSTM) | Dedicated single-purpose branch per fault class | Conservative, anti-overfitting defense |
-| **`anhtraiAI_3.zip`** | WavLM Peak Tri-Model Ensemble | Peak Conformer with sensitive frame resolution | High-Recall hunter for subtle micro-faults |
-| **`anhtraiAI_4.zip`** | Cross-Backbone Dual Conformer | Joint WavLM-Large + XLS-R-300M fusion ($2048$-dim) | Robust against dialectal and phonetic variance |
-| **`anhtraiAI_5.zip`** | Super 4-Model Heterogeneous Ensemble | 50% Dual Peak + 25% WavLM Peak + 15% Pro + 10% Decoupled | **Champion Configuration**: Highest F1 & IoU |
+| Official Run | Builder Script / JSON | Fault Localization Architecture & Blending Weights | Post-Processing Mode | Dev Score (125 VN / 1,852 QS) | Official Private Test Score |
+| :--- | :--- | :--- | :--- | :---: | :---: |
+| **Run 1 (`anhtraiAI_1.zip`)** | `build_upgraded_tri_ensemble_submission.py` (`submission_v2.json`) | `1.00 FaultFrameHead` (English QualiSpeech Dilated TCN + BiLSTM) | Static (`calibrated_postprocess_config.json`) | `0.5300` | `0.520513` |
+| **Run 2 (`anhtraiAI_2.zip`)** | `build_submission_v6.py` (`submission_v6.json`) | `0.70 Conformer (10ep) + 0.30 Decoupled Tri-Branch` | RMS-Adaptive Hysteresis | `0.7955` | `0.518264` |
+| **Run 3 (`anhtraiAI_3.zip`)** | `build_submission_v10.py` (`submission_v10.json`) | `0.60 Conformer Peak (25ep) + 0.20 Conformer-Pro + 0.20 Decoupled` | RMS-Adaptive Hysteresis | `0.8064` | `0.527469` |
+| **Run 4 (`anhtraiAI_4.zip`)** | `build_submission_v11.py` (`submission_v11.json`) | **`0.60 Dual Conformer (2048-d) + 0.40 Conformer Peak (25ep)`** | **Static Per-Class Hysteresis** | `0.8180` | **`0.530786` (Best)** |
+| **Run 5 (`anhtraiAI_5.zip`)** | `build_submission_v12.py` (`submission_v12.json`) | `0.50 Dual + 0.25 Peak + 0.15 Conformer-Pro + 0.10 Decoupled` | Static Per-Class Hysteresis | `0.8229` | `0.524252` |
 
 ---
 
@@ -92,39 +79,43 @@ To hedge against evaluation distribution shift, five complementary system paradi
 ```text
 vlsp2026-sqa/
 ├── scripts/
-│   ├── build_submission_v6.py                     # Submission builder: Attempt 2 (Decoupled)
-│   ├── build_submission_v10.py                    # Submission builder: Attempt 3 (WavLM Tri-Model)
-│   ├── build_submission_v11.py                    # Submission builder: Attempt 4 (Dual Conformer)
-│   ├── build_submission_v12.py                    # Submission builder: Attempt 5 (Super 4-Model Ensemble)
-│   ├── build_upgraded_tri_ensemble_submission.py  # Submission builder: Attempt 1 (Baseline Floor)
+│   ├── build_upgraded_tri_ensemble_submission.py  # Builder for Official Run 1 (anhtraiAI_1 / v2)
+│   ├── build_submission_v6.py                     # Builder for Official Run 2 (anhtraiAI_2 / v6)
+│   ├── build_submission_v10.py                    # Builder for Official Run 3 (anhtraiAI_3 / v10)
+│   ├── build_submission_v11.py                    # Builder for Official Run 4 (anhtraiAI_4 / v11 - Best)
+│   ├── build_submission_v12.py                    # Builder for Official Run 5 (anhtraiAI_5 / v12)
 │   ├── package_submission.py                      # Schema validation & zip packager
 │   │
-│   ├── train_fault_head_v5.py                     # Universal multi-partition training engine
-│   ├── train_conformer_fault_head.py              # Base Conformer frame decoder
-│   ├── train_conformer_25epochs.py                # Peak Conformer training script
-│   ├── train_conformer_pro.py                     # Multi-Scale Conformer-Pro training script
-│   ├── train_decoupled_fault_head.py              # Decoupled Tri-Branch training script
-│   ├── train_dual_backbone_conformer.py           # Dual-backbone Conformer training script
-│   ├── train_all_dual_backbones.py                # Dual architecture suite training
+│   ├── augment_engine.py                          # Programmatic Vietnamese audio degradation engine
+│   ├── build_vi_test_sources.py                   # Clean Vietnamese source selector (VIVOS/CV/FLEURS/TTS)
+│   ├── train_conformer_fault_head.py              # 10-epoch Conformer fault decoder
+│   ├── train_conformer_25epochs.py                # 25-epoch Conformer Peak fault decoder
+│   ├── train_conformer_pro.py                     # Multi-Scale Conformer-Pro (k=5,15,31) decoder
+│   ├── train_decoupled_fault_head.py              # Decoupled Tri-Branch (TCN + BiLSTM) decoder
+│   ├── train_dual_backbone_conformer.py           # Cross-Backbone Dual Conformer (2048-d) decoder
 │   │
-│   ├── cache_xlsr_features.py                     # Meta XLS-R 300M representation extractor
-│   ├── cache_vietnamese_aug.py                    # Audio feature caching pipeline (Round 1)
-│   ├── cache_vietnamese_aug_v3.py                 # Audio feature caching pipeline (Round 2)
-│   ├── infer_thao_utmos_model.py                  # Inference script for XLS-R Utmos MOS
-│   ├── compute_ensemble_new_thao.py               # SLSQP convex optimization for MOS weights
-│   └── benchmark_gold_test_set.py                 # Benchmark evaluation on gold test split
+│   ├── cache_vietnamese_aug.py                    # WavLM-Large feature caching (Round 1)
+│   ├── cache_vietnamese_aug_v3.py                 # WavLM-Large feature caching (Round 2 & Dev)
+│   ├── cache_xlsr_features.py                     # Meta XLS-R-300M feature caching
+│   ├── infer_thao_utmos_model.py                  # Inference for XLS-R-300M ASP MOS model
+│   ├── compute_ensemble_new_thao.py               # SLSQP convex blending for Tri-Ensemble MOS
+│   ├── benchmark_gold_test_set.py                 # Vietnamese Dev (125 clips) benchmark script (shared & per-run)
+│   ├── evaluate_official_submissions.py           # Private Test (302 clips) official benchmark (Tables 3, 4, 6, 7)
+│   └── compare_single_vs_ensemble.py              # Single-model vs. ensemble ablation script (Table 5)
 │
 ├── src/
 │   └── sqa/
 │       ├── dataset.py                             # Waveform loader, padding, and batch collation
-│       ├── evaluator.py                           # PCC, F1-macro, and Frame IoU evaluation metrics
-│       ├── frame_grid.py                          # Sample-to-frame temporal mapping geometry
-│       ├── frame_head.py                          # Frame classification decoders & pooling layers
+│       ├── evaluator.py                           # PCC, F1-macro, and 20ms Frame IoU evaluation
+│       ├── frame_grid.py                          # Sample-to-frame temporal grid mapping (20ms stride)
+│       ├── frame_head.py                          # Baseline FaultFrameHead (Dilated TCN + BiLSTM)
 │       ├── lora.py                                # Low-Rank Adaptation (LoRA) injection
-│       ├── model.py                               # UtmosNisqaQualityHead & loss objectives
-│       ├── postprocess.py                         # Hysteresis thresholding & interval serialization
-│       └── validator.py                           # Official JSON schema validation
+│       ├── model.py                               # UtmosNisqaQualityHead & MOS loss functions
+│       ├── postprocess.py                         # Two-tier hysteresis & interval normalization
+│       └── validator.py                           # Official JSON submission validator
 │
+├── paper/
+│   └── paper_lncs.tex                             # System paper in Springer LNCS format
 ├── .gitignore
 ├── pyproject.toml
 └── README.md
@@ -132,109 +123,62 @@ vlsp2026-sqa/
 
 ---
 
-## 5. Installation & Environment Setup
-
-### Prerequisites
-* Linux or Windows with NVIDIA GPU (CUDA 11.8 / 12.1)
-* Python 3.10+
-* Conda / Miniconda
+## 5. Installation & Reproducibility Workflow
 
 ### Setup Instructions
 ```bash
-# Clone the repository
 git clone https://github.com/PhuocICTHust/vlsp2026-sqa.git
 cd vlsp2026-sqa
 
-# Create and activate conda environment
 conda create -n vlsp2026-sqa python=3.10 -y
 conda activate vlsp2026-sqa
 
-# Install PyTorch with CUDA support
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# Install core dependencies
-pip install transformers soundfile scipy pandas numpy scikit-learn tqdm safetensors
+pip install transformers soundfile scipy pandas numpy scikit-learn tqdm safetensors huggingface_hub resampy
 pip install -e .
 ```
 
----
-
-## 6. Training & Inference Workflow
-
-### Step 1: Precompute Foundation Model Representations
-Precomputing and caching SSL representations accelerates downstream training by $10\times$:
-
+### Reproducing Feature Caching, Training, and Official Submissions
 ```bash
-# Extract Microsoft WavLM-Large representations
+# 1. Cache WavLM-Large (1024-d) and XLS-R-300M (1024-d) frame features
+python scripts/cache_vietnamese_aug.py
 python scripts/cache_vietnamese_aug_v3.py
-
-# Extract Meta XLS-R 300M representations
 python scripts/cache_xlsr_features.py
-```
 
-### Step 2: Train Temporal Fault Heads
-Train the specialized architectures across the target domain partitions:
-
-```bash
-# 1. Train Decoupled Tri-Branch Head
-python scripts/train_decoupled_fault_head.py
-
-# 2. Train Conformer Peak and Conformer-Pro
+# 2. Train temporal fault localization heads
+python scripts/train_conformer_fault_head.py
 python scripts/train_conformer_25epochs.py
 python scripts/train_conformer_pro.py
+python scripts/train_decoupled_fault_head.py
+python scripts/train_dual_backbone_conformer.py
 
-# 3. Train Cross-Backbone Dual Architecture Suite
-python scripts/train_all_dual_backbones.py
-```
-
-### Step 3: Calibrate Quality Score Ensemble
-Solve the constrained convex optimization problem (SLSQP) over validation folds:
-
-```bash
+# 3. Evaluate MOS Tri-Ensemble weights on QualiSpeech Test (1,852 clips)
 python scripts/compute_ensemble_new_thao.py
-```
 
-### Step 4: Generate Official Submissions
-Generate the prediction files for the target evaluation audio set:
+# 4. Evaluate fault localization on Vietnamese Dev Benchmark (125 clips, Table 2)
+python scripts/benchmark_gold_test_set.py
 
-```bash
-# Generate Champion Submission (v12 - Super 4-Model Heterogeneous Ensemble)
-python scripts/build_submission_v12.py
+# 5. Evaluate all official submissions on Private Test Set (302 clips, Tables 3, 4, 6, 7)
+python scripts/evaluate_official_submissions.py
 
-# Package and validate against official competition schema
-python scripts/package_submission.py --team-name anhtraiAI --attempt 5 --submission-json submissions/submission_v12.json
+# 6. Compare single models vs. ensemble on Private Test Set (Table 5)
+python scripts/compare_single_vs_ensemble.py
+
+# 7. Build Best Official Submission (Run 4 / anhtraiAI_4)
+python scripts/build_submission_v11.py
+python scripts/package_submission.py --team-name anhtraiAI --attempt 4 --submission-json submissions/submission_v11.json
 ```
 
 ---
 
-## 7. Submission Schema Compliance
+## 6. License & Data Terms
 
-Predictions strictly conform to the format published by the VLSP 2026 committee:
-
-```json
-[
-  {
-    "file_id": "test_0001.wav",
-    "quality_score": 3.4544,
-    "faults": {
-      "noise": [[1.18, 1.64], [2.90, 3.80]],
-      "distortion": [[3.04, 3.58]],
-      "unnatural_pause": []
-    }
-  }
-]
-```
-
-* `file_id`: Audio file identifier with extension (`.wav`).
-* `quality_score`: Continuous scalar in range $[1.0, 5.0]$.
-* `faults`: Dictionary containing arrays of $[t_{\text{start}}, t_{\text{end}}]$ intervals in seconds, or `[]` when no fault is detected.
+* **Code License**: The source code in this repository is licensed under **CC BY-NC-SA 4.0** (Attribution-NonCommercial-ShareAlike 4.0 International), consistent with the upstream QualiSpeech dataset license.
+* **Dataset Redistribution Policy**: In compliance with the QualiSpeech (CC BY-NC-SA 4.0) and BVCC licensing terms, no raw audio files or BVCC-derived annotations are redistributed in this repository. Users must obtain QualiSpeech directly from the official Hugging Face page (`https://huggingface.co/datasets/tsinghua-ee/QualiSpeech`).
 
 ---
 
-## 8. Authors & Acknowledgments
+## 7. Authors & Acknowledgments
 
-* **Team**: `anhtraiAI`
-* **Affiliation**: HuSTek Lab, Hanoi University of Science and Technology (HUST)
-* **Competition**: VLSP 2026 Evaluation Campaign — Vietnamese Language and Speech Processing.
-
-We express our gratitude to the organizers of VLSP 2026 for providing the evaluation benchmarks, to HuSTek Lab (HUST) for computational hardware and infrastructure support, and to the open-source community for pretrained models (`microsoft/wavlm-large`, `facebook/wav2vec2-xls-r-300m`).
+* **Team**: `anhtraiAI` — Phuoc Duc Pham, Thao Do Minh Vu, Dat Tien Nguyen, Hieu Trung Tran, Kien Hoang Le, Nhat Tran Minh Nguyen, Hoang Duc Nguyen, Dien Huy Nguyen.
+* **Affiliation**: HuSTek Lab & School of Information and Communication Technology (SoICT), Hanoi University of Science and Technology (HUST), Hanoi, Vietnam.

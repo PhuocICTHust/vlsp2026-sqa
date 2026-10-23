@@ -1,3 +1,9 @@
+"""
+Script: scripts/train_dual_backbone_conformer.py
+Train Cross-Backbone Dual Conformer Fault Localization Head (2048-dim input)
+fusing WavLM-Large (1024-d) and XLS-R-300M (1024-d) features on Vietnamese augmented speech.
+"""
+
 import json
 import math
 import sys
@@ -6,8 +12,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
-if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
-if str(SRC) not in sys.path: sys.path.insert(0, str(SRC))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -19,18 +27,19 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
 from sqa.evaluator import FAULT_TYPES, compute_f1_macro, compute_frame_iou_macro
-from sqa.frame_grid import MODEL_GRID, EVALUATOR_GRID, intervals_to_model_frame_targets
+from sqa.frame_grid import EVALUATOR_GRID, MODEL_GRID, intervals_to_model_frame_targets
 from sqa.postprocess import BASELINE_POSTPROCESS, PostProcessConfig, predict_fault_type, serialize_intervals
 from scripts.train_fault_head_v5 import (
-    compute_focal_bce_loss,
-    compute_soft_iou_loss,
-    compute_presence_loss,
-    OLD_DIR,
-    NEW_DIR,
-    TEST_DIR,
     DEVICE,
+    NEW_DIR,
+    OLD_DIR,
+    TEST_DIR,
+    compute_focal_bce_loss,
+    compute_presence_loss,
+    compute_soft_iou_loss,
 )
-from scripts.train_conformer_fault_head import ConformerConvModule, ConformerBlock
+from scripts.train_conformer_fault_head import ConformerBlock, ConformerConvModule
+
 
 class DualBackboneConformerHead(nn.Module):
     def __init__(self, input_dim: int = 2048, hidden_dim: int = 256, num_blocks: int = 2, num_classes: int = 3, dropout: float = 0.1):
@@ -53,9 +62,9 @@ class DualBackboneConformerHead(nn.Module):
         )
 
     def forward(self, h: torch.Tensor, valid_mask: torch.Tensor | None = None) -> torch.Tensor:
-        B, T, _ = h.shape
+        b, t, _ = h.shape
         if valid_mask is None:
-            mask = torch.ones((B, T), dtype=torch.bool, device=h.device)
+            mask = torch.ones((b, t), dtype=torch.bool, device=h.device)
         else:
             mask = valid_mask
         mask_f = mask.unsqueeze(-1).float()
@@ -64,6 +73,7 @@ class DualBackboneConformerHead(nn.Module):
             x = blk(x, mask)
         logits = self.classifier(x)
         return logits.masked_fill(~mask.unsqueeze(-1), -30.0)
+
 
 class DualCachedDataset(Dataset):
     def __init__(self, items: list[dict]):
@@ -76,24 +86,24 @@ class DualCachedDataset(Dataset):
         item = self.items[idx]
         wavlm_pt = torch.load(item["wavlm_path"], map_location="cpu")
         xlsr_pt = torch.load(item["xlsr_path"], map_location="cpu")
-        
+
         hw = wavlm_pt["hidden"]
         hx = xlsr_pt["hidden"]
         min_t = min(hw.shape[0], hx.shape[0])
         fused = torch.cat([hw[:min_t], hx[:min_t]], dim=-1)
-        
+
         dur = float(wavlm_pt.get("duration", 0.0))
         if dur <= 0.0:
             dur = float(item.get("duration", 0.0))
         if dur <= 0.0:
             dur = float(min_t * MODEL_GRID.frame_hop_sec)
         valid_mask = torch.ones(min_t, dtype=torch.bool)
-        
+
         target_frames = np.zeros((min_t, len(FAULT_TYPES)), dtype=np.float32)
         for i, ft in enumerate(FAULT_TYPES):
             intervals = item["fault_dict"].get(ft, [])
             target_frames[:, i] = intervals_to_model_frame_targets(intervals, min_t, MODEL_GRID)
-        
+
         return {
             "hidden": fused,
             "valid_mask": valid_mask,
@@ -103,21 +113,22 @@ class DualCachedDataset(Dataset):
             "gt_faults": item["fault_dict"],
         }
 
+
 def dual_collate_fn(batch):
     max_len = max(b["hidden"].shape[0] for b in batch)
     feat_dim = batch[0]["hidden"].shape[1]
     b_size = len(batch)
-    
+
     padded_h = torch.zeros((b_size, max_len, feat_dim), dtype=torch.float32)
     padded_m = torch.zeros((b_size, max_len), dtype=torch.bool)
     padded_t = torch.zeros((b_size, max_len, 3), dtype=torch.float32)
-    
+
     for i, b in enumerate(batch):
         l = b["hidden"].shape[0]
         padded_h[i, :l] = b["hidden"]
         padded_m[i, :l] = b["valid_mask"]
         padded_t[i, :l] = b["targets"]
-        
+
     return {
         "hidden": padded_h,
         "valid_mask": padded_m,
@@ -127,9 +138,10 @@ def dual_collate_fn(batch):
         "gt_faults": [b["gt_faults"] for b in batch],
     }
 
+
 def main():
     print("=" * 80, flush=True)
-    print("HUẤN LUYỆN DUAL-BACKBONE CONFORMER HEAD (WavLM-Large + XLS-R-300M)", flush=True)
+    print("TRAINING CROSS-BACKBONE DUAL CONFORMER HEAD (WavLM-Large + XLS-R-300M)", flush=True)
     print("=" * 80, flush=True)
     print(f"Device: {DEVICE}", flush=True)
 
@@ -138,7 +150,8 @@ def main():
         l_path = p_dir / "labels.jsonl"
         with open(l_path, "r", encoding="utf-8") as f:
             for line in f:
-                if not line.strip(): continue
+                if not line.strip():
+                    continue
                 it = json.loads(line)
                 stem = Path(it["file_id"]).stem
                 wp = p_dir / "wavlm_cache" / f"{stem}.pt"
@@ -157,7 +170,8 @@ def main():
     test_items = []
     with open(TEST_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             it = json.loads(line)
             stem = Path(it["file_id"]).stem
             wp = TEST_DIR / "wavlm_cache" / f"{stem}.pt"
@@ -235,15 +249,16 @@ def main():
             best_score = comp
             best_f1 = f1
             best_iou = iou
-            marker = " [★ NEW BEST DUAL-BACKBONE]"
+            marker = " [NEW BEST]"
             torch.save(model.state_dict(), ROOT / "outputs" / "fault_head_v5" / "best_dual_backbone_conformer.pt")
 
         print(f"Epoch {ep:2d}/{epochs} | Loss: {train_loss:.4f} | F1: {f1:.4f} | IoU: {iou:.4f} | Fault Avg: {comp*100:.2f}%{marker}", flush=True)
 
-    print(f"\n★ Hoàn tất huấn luyện Dual-Backbone Conformer trong {time.time() - t0:.1f}s!", flush=True)
+    print(f"\nTraining completed in {time.time() - t0:.1f}s.", flush=True)
     print(f"  Best Val F1:  {best_f1:.4f}", flush=True)
     print(f"  Best Val IoU: {best_iou:.4f}", flush=True)
-    print(f"  Best Fault Avg (Uncalibrated): {best_score*100:.2f}%", flush=True)
+    print(f"  Best Fault Avg: {best_score*100:.2f}%", flush=True)
+
 
 if __name__ == "__main__":
     main()

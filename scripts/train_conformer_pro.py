@@ -1,9 +1,6 @@
 """
-Conformer-Pro Frame Decoder:
-1. Multi-Scale Depthwise Convolutions (kernel 5 for micro-distortion, kernel 15 for noise, kernel 31 for pause).
-2. SpecAugment on Embeddings (Time Masking + Channel Masking) for robust generalization.
-3. Boundary / Edge Transition Loss to enforce sharp time onsets/offsets.
-Huấn luyện trên 2,000 files tiếng Việt và kiểm tra trên Gold Test Set (125 clips).
+Script: scripts/train_conformer_pro.py
+Train Multi-Scale Conformer-Pro Fault Localization Head with SpecAugment and Boundary Loss.
 """
 
 import json
@@ -14,8 +11,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
-if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
-if str(SRC) not in sys.path: sys.path.insert(0, str(SRC))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -27,19 +26,20 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from sqa.evaluator import FAULT_TYPES, compute_f1_macro, compute_frame_iou_macro
-from sqa.frame_grid import MODEL_GRID, EVALUATOR_GRID
+from sqa.frame_grid import EVALUATOR_GRID, MODEL_GRID
 from sqa.postprocess import BASELINE_POSTPROCESS, PostProcessConfig, predict_fault_type, serialize_intervals
 from scripts.train_fault_head_v5 import (
     CombinedCachedDataset,
-    fault_collate_fn,
-    compute_focal_bce_loss,
-    compute_soft_iou_loss,
-    compute_presence_loss,
-    OLD_DIR,
-    NEW_DIR,
-    TEST_DIR,
     DEVICE,
+    NEW_DIR,
+    OLD_DIR,
+    TEST_DIR,
+    compute_focal_bce_loss,
+    compute_presence_loss,
+    compute_soft_iou_loss,
+    fault_collate_fn,
 )
+
 
 def apply_spec_augment(x: torch.Tensor, mask: torch.Tensor, is_training: bool = True, p: float = 0.5) -> torch.Tensor:
     """SpecAugment on hidden features [B, T, D]."""
@@ -49,19 +49,21 @@ def apply_spec_augment(x: torch.Tensor, mask: torch.Tensor, is_training: bool = 
     x_aug = x.clone()
     for i in range(b):
         valid_t = int(mask[i].sum().item())
-        if valid_t < 10: continue
+        if valid_t < 10:
+            continue
         n_t_masks = np.random.randint(1, 3)
         for _ in range(n_t_masks):
             t_len = np.random.randint(4, min(16, valid_t // 2))
             t_start = np.random.randint(0, valid_t - t_len)
-            x_aug[i, t_start:t_start + t_len, :] = 0.0
+            x_aug[i, t_start : t_start + t_len, :] = 0.0
 
         n_c_masks = np.random.randint(1, 3)
         for _ in range(n_c_masks):
             c_len = np.random.randint(32, 65)
             c_start = np.random.randint(0, d - c_len)
-            x_aug[i, :, c_start:c_start + c_len] = 0.0
+            x_aug[i, :, c_start : c_start + c_len] = 0.0
     return x_aug
+
 
 def compute_boundary_loss(probs: torch.Tensor, targets: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     """Penalize blurry edges by aligning first-order temporal differences."""
@@ -70,16 +72,17 @@ def compute_boundary_loss(probs: torch.Tensor, targets: torch.Tensor, mask: torc
     valid = (mask[:, 1:] & mask[:, :-1]).unsqueeze(-1).to(probs.dtype)
     return F.binary_cross_entropy(diff_p.clamp(1e-6, 1.0 - 1e-6), diff_t, weight=valid)
 
+
 class MultiScaleConvModule(nn.Module):
     def __init__(self, dim: int, dropout: float = 0.1):
         super().__init__()
         self.layer_norm = nn.LayerNorm(dim)
         self.pointwise_conv1 = nn.Conv1d(dim, 2 * dim, kernel_size=1)
-        
+
         self.dw_k5 = nn.Conv1d(dim // 4, dim // 4, kernel_size=5, padding=2, groups=dim // 4)
         self.dw_k15 = nn.Conv1d(dim // 2, dim // 2, kernel_size=15, padding=7, groups=dim // 2)
         self.dw_k31 = nn.Conv1d(dim // 4, dim // 4, kernel_size=31, padding=15, groups=dim // 4)
-        
+
         self.batch_norm = nn.BatchNorm1d(dim)
         self.pointwise_conv2 = nn.Conv1d(dim, dim, kernel_size=1)
         self.dropout = nn.Dropout(dropout)
@@ -87,13 +90,13 @@ class MultiScaleConvModule(nn.Module):
     def forward(self, x: torch.Tensor, mask_f: torch.Tensor) -> torch.Tensor:
         res = x
         x = self.layer_norm(x) * mask_f
-        x = x.transpose(1, 2)  # [B, D, T]
+        x = x.transpose(1, 2)
         x = self.pointwise_conv1(x)
-        x = F.glu(x, dim=1)  # [B, D, T]
+        x = F.glu(x, dim=1)
 
-        x5 = self.dw_k5(x[:, :x.shape[1]//4, :])
-        x15 = self.dw_k15(x[:, x.shape[1]//4:3*x.shape[1]//4, :])
-        x31 = self.dw_k31(x[:, 3*x.shape[1]//4:, :])
+        x5 = self.dw_k5(x[:, : x.shape[1] // 4, :])
+        x15 = self.dw_k15(x[:, x.shape[1] // 4 : 3 * x.shape[1] // 4, :])
+        x31 = self.dw_k31(x[:, 3 * x.shape[1] // 4 :, :])
         x_dw = torch.cat([x5, x15, x31], dim=1)
 
         x_dw = self.batch_norm(x_dw)
@@ -101,6 +104,7 @@ class MultiScaleConvModule(nn.Module):
         x_out = self.pointwise_conv2(x_dw)
         x_out = self.dropout(x_out).transpose(1, 2)
         return (res + x_out) * mask_f
+
 
 class ConformerProBlock(nn.Module):
     def __init__(self, dim: int = 256, num_heads: int = 4, dropout: float = 0.1):
@@ -140,6 +144,7 @@ class ConformerProBlock(nn.Module):
         x = x + 0.5 * self.ffn2(self.ffn2_norm(x)) * mask_f
         return self.final_norm(x) * mask_f
 
+
 class ConformerProFaultHead(nn.Module):
     def __init__(self, input_dim: int = 1024, hidden_dim: int = 256, num_blocks: int = 2):
         super().__init__()
@@ -164,16 +169,18 @@ class ConformerProFaultHead(nn.Module):
         logits = self.classifier(x)
         return logits.masked_fill(~mask.unsqueeze(-1), -30.0)
 
+
 def main():
     print("=" * 75)
-    print("HUẤN LUYỆN CONFORMER-PRO FRAME DECODER (MULTI-SCALE + SPECAUG + BOUNDARY LOSS)")
+    print("TRAINING CONFORMER-PRO FAULT HEAD (MULTI-SCALE + SPECAUG + BOUNDARY LOSS)")
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
     old_items = []
     with open(OLD_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = OLD_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             if pt_path.exists():
@@ -182,7 +189,8 @@ def main():
     new_items = []
     with open(NEW_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = NEW_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             if pt_path.exists():
@@ -194,7 +202,8 @@ def main():
     test_items = []
     with open(TEST_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = TEST_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             test_items.append({"file_id": item["file_id"], "pt_path": pt_path, "fault_dict": item["faults"]})
@@ -265,14 +274,15 @@ def main():
         if comp > best_score:
             best_score = comp
             best_epoch = ep
-            marker = " [★ NEW BEST]"
+            marker = " [NEW BEST]"
             torch.save(model.state_dict(), "outputs/fault_head_v5/best_conformer_pro.pt")
 
         print(f"Epoch {ep:2d}/{epochs} | Loss: {train_loss:.4f} | Val F1: {f1:.4f} | Val IoU: {iou:.4f} | Combined: {comp*100:.2f}%{marker}")
 
     print("\n" + "=" * 75)
-    print(f"Hoàn tất trong {time.time() - t0:.1f}s. Điểm cao nhất Conformer-Pro: {best_score*100:.2f}% tại Epoch {best_epoch}!")
+    print(f"Completed in {time.time() - t0:.1f}s. Best validation score: {best_score*100:.2f}% at Epoch {best_epoch}")
     print("=" * 75)
+
 
 if __name__ == "__main__":
     main()

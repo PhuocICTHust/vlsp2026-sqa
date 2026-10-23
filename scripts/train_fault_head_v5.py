@@ -1,11 +1,9 @@
 """
 Script: scripts/train_fault_head_v5.py
-Huấn luyện FaultFrameHead v5 (Universal) trên GỘP CẢ 2,000 FILES TIẾNG VIỆT:
-- 1,000 files từ vietnamese_aug (data cũ)
-- 1,000 files từ vietnamese_aug_v3/train (data mới)
-- Validation trên 125 files Gold Test Set (vietnamese_test_v1).
-- Tinh chỉnh ngưỡng tối ưu (Presence-Gating + Hysteresis).
-- Lưu kết quả tại outputs/fault_head_v5/.
+Train universal FaultFrameHead v5 on combined 2,000 Vietnamese augmented clips:
+  - 1,000 clips from vietnamese_aug
+  - 1,000 clips from vietnamese_aug_v3/train
+  - Validation on 125 clips of the Vietnamese Development Benchmark (vietnamese_test_v1).
 """
 
 from __future__ import annotations
@@ -22,7 +20,6 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -203,7 +200,7 @@ def calibrate_thresholds(head: FaultFrameHead, loader: DataLoader):
     print(f"Baseline Post-processing Score: {best_score*100:.2f}% (F1: {baseline_res['f1_macro']:.4f}, IoU: {baseline_res['iou_macro']:.4f})")
 
     for ft in FAULT_TYPES:
-        print(f"Cân chỉnh tham số cho lỗi: {ft}...")
+        print(f"Calibrating parameters for: {ft}...")
         best_ft_cfg = best_cfg[ft]
         for use_pg in [True, False]:
             for tau_p in [0.25, 0.35, 0.45]:
@@ -225,23 +222,24 @@ def calibrate_thresholds(head: FaultFrameHead, loader: DataLoader):
                                 best_score = res["composite"]
                                 best_ft_cfg = trial_cfg[ft]
                                 best_cfg[ft] = best_ft_cfg
-        print(f"-> Tối ưu {ft}: tau_frame={best_ft_cfg.tau_frame:.2f}, min_dur={best_ft_cfg.min_duration:.2f}, merge={best_ft_cfg.merge_gap:.2f}, pg={best_ft_cfg.use_presence_gate}")
+        print(f"-> Optimal {ft}: tau_frame={best_ft_cfg.tau_frame:.2f}, min_dur={best_ft_cfg.min_duration:.2f}, merge={best_ft_cfg.merge_gap:.2f}, pg={best_ft_cfg.use_presence_gate}")
 
     final_res = evaluate_fault_head(head, loader, best_cfg)
-    print(f"-> Điểm sau khi Cân chỉnh: {final_res['composite']*100:.2f}% (F1: {final_res['f1_macro']:.4f}, IoU: {final_res['iou_macro']:.4f})")
+    print(f"-> Calibrated Score: {final_res['composite']*100:.2f}% (F1: {final_res['f1_macro']:.4f}, IoU: {final_res['iou_macro']:.4f})")
     return best_cfg, final_res
 
 
 def main():
     print("=" * 75)
-    print("HUẤN LUYỆN FAULT FRAME HEAD V5 — GỘP FULL 2,000 FILES TIẾNG VIỆT")
+    print("TRAINING FAULT FRAME HEAD V5 (2,000 VIETNAMESE CLIPS)")
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
     old_items = []
     with open(OLD_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             fid = item["file_id"]
             stem = Path(fid).stem
@@ -251,14 +249,15 @@ def main():
                     "dataset": "old",
                     "file_id": f"old_{fid}",
                     "pt_path": pt_path,
-                    "fault_dict": item["faults"]
+                    "fault_dict": item["faults"],
                 })
-    print(f"-> Đã nạp từ tập cũ: {len(old_items)} files.")
+    print(f"Loaded {len(old_items)} clips from old augmentation dataset.")
 
     new_items = []
     with open(NEW_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             fid = item["file_id"]
             stem = Path(fid).stem
@@ -268,17 +267,18 @@ def main():
                     "dataset": "new",
                     "file_id": f"new_{fid}",
                     "pt_path": pt_path,
-                    "fault_dict": item["faults"]
+                    "fault_dict": item["faults"],
                 })
-    print(f"-> Đã nạp từ tập mới: {len(new_items)} files.")
+    print(f"Loaded {len(new_items)} clips from new augmentation dataset.")
 
     all_train_items = old_items + new_items
-    print(f"Tổng cộng mẫu huấn luyện: {len(all_train_items)} FILES tiếng Việt.")
+    print(f"Total training clips: {len(all_train_items)} files.")
 
     test_items = []
     with open(TEST_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             fid = item["file_id"]
             stem = Path(fid).stem
@@ -287,9 +287,9 @@ def main():
                 "dataset": "test",
                 "file_id": fid,
                 "pt_path": pt_path,
-                "fault_dict": item["faults"]
+                "fault_dict": item["faults"],
             })
-    print(f"-> Tập Validation (Gold Test Set): {len(test_items)} files.")
+    print(f"Validation clips (Gold Dev Set): {len(test_items)} files.")
 
     train_ds = CombinedCachedDataset(all_train_items)
     val_ds = CombinedCachedDataset(test_items)
@@ -297,7 +297,7 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, collate_fn=fault_collate_fn)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, collate_fn=fault_collate_fn)
 
-    print(f"-> Khởi tạo trọng số từ: {INIT_CKPT.name}")
+    print(f"Initializing weights from: {INIT_CKPT.name}")
     init_payload = torch.load(INIT_CKPT, map_location="cpu")
     head_kwargs = init_payload.get("fault_head_kwargs", {
         "input_dim": 1024,
@@ -309,10 +309,10 @@ def main():
     head.load_state_dict(init_payload["fault_head_state_dict"])
 
     m_base = evaluate_fault_head(head, val_loader)
-    print(f"\nĐiểm khởi điểm (Zero-shot) trên 125 clips Test Set:")
+    print(f"\nZero-shot performance on 125 clips Dev Set:")
     print(f"  F1: {m_base['f1_macro']:.4f} | IoU: {m_base['iou_macro']:.4f} | Combined: {m_base['composite']*100:.2f}%")
 
-    print(f"\nBắt đầu Huấn luyện Fault Head v5 ({EPOCHS} epochs, lr={LR})...")
+    print(f"\nStarting Fault Head v5 training ({EPOCHS} epochs, lr={LR})...")
     optimizer = torch.optim.AdamW(head.parameters(), lr=LR, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-5)
 
@@ -352,11 +352,11 @@ def main():
         if score > best_score:
             best_score = score
             best_weights = {k: v.cpu().clone() for k, v in head.state_dict().items()}
-            marker = " [★ NEW BEST]"
+            marker = " [NEW BEST]"
 
         print(f"Epoch {epoch:2d}/{EPOCHS} | Loss: {train_loss:.4f} | Val F1: {m_eval['f1_macro']:.4f} | Val IoU: {m_eval['iou_macro']:.4f} | Combined: {score*100:.2f}%{marker}")
 
-    print(f"\nHoàn thành huấn luyện 2,000 files trong {time.time() - t0:.1f}s.")
+    print(f"\nTraining completed in {time.time() - t0:.1f}s.")
 
     head.load_state_dict(best_weights)
     best_ckpt = OUT_DIR / "best_fault_frame_head.pt"
@@ -366,7 +366,7 @@ def main():
         "best_composite": best_score,
         "seed": SEED,
     }, best_ckpt)
-    print(f"Đã lưu checkpoint tốt nhất tại: {best_ckpt}")
+    print(f"Saved best checkpoint to: {best_ckpt}")
 
     calib_cfg, final_res = calibrate_thresholds(head, val_loader)
     calib_json = OUT_DIR / "calibrated_postprocess_config.json"
@@ -375,10 +375,10 @@ def main():
             "calibrated_configs": {k: v.__dict__ for k, v in calib_cfg.items()},
             "calibrated_metrics": final_res,
         }, f, indent=2)
-    print(f"Đã lưu file cấu hình ngưỡng tại: {calib_json}")
+    print(f"Saved calibrated configurations to: {calib_json}")
 
     print("\n" + "=" * 65)
-    print("TỔNG KẾT MÔ HÌNH FAULT HEAD V5 TRÊN GOLD TEST SET:")
+    print("SUMMARY OF FAULT HEAD V5 ON GOLD DEV SET:")
     print(f"  F1 Macro:  {final_res['f1_macro']:.4f}")
     print(f"  IoU Macro: {final_res['iou_macro']:.4f}")
     print(f"  Combined:  {final_res['composite']*100:.2f}%")

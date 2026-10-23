@@ -124,7 +124,7 @@ class UtmosNisqaQualityHead(nn.Module):
         self.use_fault_features = use_fault_features
         self.n_fault_types = n_fault_types
 
-        # 1. UTMOS-style Temporal BiLSTM Context
+        # Temporal BiLSTM context
         self.bilstm = nn.LSTM(
             input_size=hidden_size,
             hidden_size=bilstm_hidden,
@@ -134,16 +134,16 @@ class UtmosNisqaQualityHead(nn.Module):
         )
         lstm_out_dim = bilstm_hidden * 2  # 256
 
-        # 2. Attention projection for frame weighting
+        # Attention projection for frame weighting
         self.attn_proj = nn.Linear(lstm_out_dim, 1)
 
-        # 3. Statistics pooling (Mean + Std -> 2 * lstm_out_dim)
+        # Statistics pooling (Mean + Std -> 2 * lstm_out_dim)
         pooled_dim = lstm_out_dim * 2  # 512
         if use_fault_features:
             # Fault statistics: [mean, max] per fault type -> 2 * n_fault_types (6)
             pooled_dim += 2 * n_fault_types
 
-        # 4. Final Quality Regression MLP
+        # Quality regression MLP
         layers = [
             nn.Linear(pooled_dim, mlp_hidden),
         ]
@@ -213,7 +213,7 @@ class UtmosNisqaQualityHead(nn.Module):
                 fault_feats = h.new_zeros(h.shape[0], 2 * self.n_fault_types)
             pooled = torch.cat([pooled, fault_feats], dim=-1)
 
-        # Step 5: Bounded MOS regression [1.0, 5.0]
+        # Bounded MOS regression [1.0, 5.0]
         raw = self.mlp(pooled).squeeze(-1)  # [B]
         return torch.sigmoid(raw) * 4.0 + 1.0
 
@@ -350,18 +350,6 @@ def quality_loss(
         rank = pairwise_ranking_loss(pred, gt, margin=rank_margin)
         loss = loss + w_rank * rank
     return loss
-
-
-
-# class StubFaultHead(nn.Module):
-
-#     def __init__(self, hidden_size: int, n_fault_types: int = 3):
-#         super().__init__()
-#         self.proj = nn.Linear(hidden_size, n_fault_types)
-
-#     def forward(self, h: torch.Tensor) -> torch.Tensor:
-#         logits = self.proj(h)  # [B,T,3] — random init, CHƯA train
-#         return torch.sigmoid(logits)
 
 
 class SQAModel(nn.Module):

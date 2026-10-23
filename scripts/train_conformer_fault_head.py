@@ -1,7 +1,6 @@
 """
-Experiment 3: Conformer Frame Decoder Head for Fault Localization.
-Thay thế TCN bằng Conformer Block (Feed-Forward + Multi-Head Self-Attention + Depthwise Conv + Feed-Forward).
-Huấn luyện trên 2,000 files tiếng Việt có sẵn WavLM cache.
+Script: scripts/train_conformer_fault_head.py
+Train Conformer Frame Decoder Fault Localization Head (10 Epochs) on Vietnamese augmented speech.
 """
 
 import json
@@ -12,8 +11,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
-if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
-if str(SRC) not in sys.path: sys.path.insert(0, str(SRC))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -25,19 +26,20 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from sqa.evaluator import FAULT_TYPES, compute_f1_macro, compute_frame_iou_macro
-from sqa.frame_grid import MODEL_GRID, EVALUATOR_GRID
+from sqa.frame_grid import EVALUATOR_GRID, MODEL_GRID
 from sqa.postprocess import BASELINE_POSTPROCESS, PostProcessConfig, predict_fault_type, serialize_intervals
 from scripts.train_fault_head_v5 import (
     CombinedCachedDataset,
-    fault_collate_fn,
-    compute_focal_bce_loss,
-    compute_soft_iou_loss,
-    compute_presence_loss,
-    OLD_DIR,
-    NEW_DIR,
-    TEST_DIR,
     DEVICE,
+    NEW_DIR,
+    OLD_DIR,
+    TEST_DIR,
+    compute_focal_bce_loss,
+    compute_presence_loss,
+    compute_soft_iou_loss,
+    fault_collate_fn,
 )
+
 
 class ConformerConvModule(nn.Module):
     def __init__(self, dim: int, kernel_size: int = 15, dropout: float = 0.1):
@@ -60,84 +62,94 @@ class ConformerConvModule(nn.Module):
         x = F.glu(x, dim=1)  # [B, D, T]
         x = self.depthwise_conv(x)
         x = self.batch_norm(x)
-        x = F.gelu(x)
+        x = F.silu(x)
         x = self.pointwise_conv2(x)
         x = self.dropout(x)
         x = x.transpose(1, 2)  # [B, T, D]
         return (res + x) * mask_f
 
-class ConformerBlock(nn.Module):
-    def __init__(self, dim: int = 256, num_heads: int = 4, conv_kernel: int = 15, dropout: float = 0.1):
+
+class ConformerFeedForward(nn.Module):
+    def __init__(self, dim: int, mult: int = 4, dropout: float = 0.1):
         super().__init__()
-        self.ffn1_norm = nn.LayerNorm(dim)
-        self.ffn1 = nn.Sequential(
-            nn.Linear(dim, dim * 2),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(dim * 2, dim),
-            nn.Dropout(dropout),
-        )
+        self.layer_norm = nn.LayerNorm(dim)
+        self.linear1 = nn.Linear(dim, dim * mult)
+        self.dropout1 = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(dim * mult, dim)
+        self.dropout2 = nn.Dropout(dropout)
 
-        self.attn_norm = nn.LayerNorm(dim)
-        self.attn = nn.MultiheadAttention(dim, num_heads, dropout=dropout, batch_first=True)
-        self.attn_drop = nn.Dropout(dropout)
+    def forward(self, x: torch.Tensor, mask_f: torch.Tensor) -> torch.Tensor:
+        res = x
+        x = self.layer_norm(x) * mask_f
+        x = self.linear1(x)
+        x = F.silu(x)
+        x = self.dropout1(x)
+        x = self.linear2(x)
+        x = self.dropout2(x)
+        return (res + 0.5 * x) * mask_f
 
-        self.conv_module = ConformerConvModule(dim, kernel_size=conv_kernel, dropout=dropout)
 
-        self.ffn2_norm = nn.LayerNorm(dim)
-        self.ffn2 = nn.Sequential(
-            nn.Linear(dim, dim * 2),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(dim * 2, dim),
-            nn.Dropout(dropout),
-        )
+class ConformerBlock(nn.Module):
+    def __init__(self, dim: int, num_heads: int = 4, conv_kernel: int = 15, dropout: float = 0.1):
+        super().__init__()
+        self.ff1 = ConformerFeedForward(dim, mult=4, dropout=dropout)
+        self.norm_attn = nn.LayerNorm(dim)
+        self.self_attn = nn.MultiheadAttention(dim, num_heads, dropout=dropout, batch_first=True)
+        self.drop_attn = nn.Dropout(dropout)
+        self.conv = ConformerConvModule(dim, kernel_size=conv_kernel, dropout=dropout)
+        self.ff2 = ConformerFeedForward(dim, mult=4, dropout=dropout)
         self.final_norm = nn.LayerNorm(dim)
 
-    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        mask_f = mask.unsqueeze(-1).to(x.dtype)
-        x = x + 0.5 * self.ffn1(self.ffn1_norm(x)) * mask_f
-        norm_x = self.attn_norm(x)
-        attn_out, _ = self.attn(norm_x, norm_x, norm_x, key_padding_mask=~mask)
-        x = (x + self.attn_drop(attn_out)) * mask_f
-        x = self.conv_module(x, mask_f)
-        x = x + 0.5 * self.ffn2(self.ffn2_norm(x)) * mask_f
+    def forward(self, x: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
+        mask_f = valid_mask.unsqueeze(-1).float()
+        x = self.ff1(x, mask_f)
+        normed = self.norm_attn(x)
+        attn_out, _ = self.self_attn(normed, normed, normed, key_padding_mask=~valid_mask)
+        x = (x + self.drop_attn(attn_out)) * mask_f
+        x = self.conv(x, mask_f)
+        x = self.ff2(x, mask_f)
         return self.final_norm(x) * mask_f
 
+
 class ConformerFaultHead(nn.Module):
-    def __init__(self, input_dim: int = 1024, hidden_dim: int = 256, num_blocks: int = 2):
+    def __init__(self, input_dim: int = 1024, hidden_dim: int = 256, num_blocks: int = 2, n_faults: int = 3, dropout: float = 0.1):
         super().__init__()
         self.in_proj = nn.Linear(input_dim, hidden_dim)
         self.blocks = nn.ModuleList([
-            ConformerBlock(dim=hidden_dim, num_heads=4, conv_kernel=15, dropout=0.1)
+            ConformerBlock(hidden_dim, num_heads=4, conv_kernel=15, dropout=dropout)
             for _ in range(num_blocks)
         ])
-        self.classifier = nn.Linear(hidden_dim, 3)
+        self.out_head = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim // 2, n_faults),
+        )
 
     def forward(self, h: torch.Tensor, valid_mask: torch.Tensor | None = None) -> torch.Tensor:
         b, t, _ = h.shape
         if valid_mask is None:
-            mask = torch.ones(b, t, dtype=torch.bool, device=h.device)
-        else:
-            mask = valid_mask.to(h.device)
-        mask_f = mask.unsqueeze(-1).to(h.dtype)
-
+            valid_mask = torch.ones((b, t), dtype=torch.bool, device=h.device)
+        mask_f = valid_mask.unsqueeze(-1).float()
         x = self.in_proj(h) * mask_f
         for blk in self.blocks:
-            x = blk(x, mask)
-        logits = self.classifier(x)
-        return logits.masked_fill(~mask.unsqueeze(-1), -30.0)
+            x = blk(x, valid_mask)
+        logits = self.out_head(x)
+        logits = logits.masked_fill(~valid_mask.unsqueeze(-1), -30.0)
+        return logits
+
 
 def main():
     print("=" * 75)
-    print("THỬ NGHIỆM CONFORMER FRAME DECODER FAULT HEAD")
+    print("TRAINING CONFORMER FAULT HEAD (10 EPOCHS)")
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
     old_items = []
     with open(OLD_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = OLD_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             if pt_path.exists():
@@ -146,7 +158,8 @@ def main():
     new_items = []
     with open(NEW_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = NEW_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             if pt_path.exists():
@@ -158,7 +171,8 @@ def main():
     test_items = []
     with open(TEST_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = TEST_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             test_items.append({"file_id": item["file_id"], "pt_path": pt_path, "fault_dict": item["faults"]})
@@ -221,14 +235,15 @@ def main():
         f1, _ = compute_f1_macro(preds, gts)
         iou, _ = compute_frame_iou_macro(preds, gts, durs, EVALUATOR_GRID)
         comp = 0.5 * f1 + 0.5 * iou
-        marker = " [★ NEW BEST]" if comp > best_score else ""
+        marker = " [NEW BEST]" if comp > best_score else ""
         if comp > best_score:
             best_score = comp
             torch.save(model.state_dict(), "outputs/fault_head_v5/best_conformer_fault_head.pt")
 
         print(f"Epoch {ep:2d}/{epochs} | Loss: {train_loss:.4f} | Val F1: {f1:.4f} | Val IoU: {iou:.4f} | Combined: {comp*100:.2f}%{marker}")
 
-    print(f"\nHoàn tất trong {time.time() - t0:.1f}s. Điểm cao nhất Conformer Head: {best_score*100:.2f}%")
+    print(f"\nTraining completed in {time.time() - t0:.1f}s. Best validation score: {best_score*100:.2f}%")
+
 
 if __name__ == "__main__":
     main()

@@ -1,4 +1,6 @@
-"""Submission generator for build_submission_v6."""
+"""Submission generator for Official Run 2 (anhtraiAI_2.zip / submission_v6.json).
+Vietnamese Synthetic Dev Set (125 clips) Fault Avg: 83.75% (per-run calibrated) / 83.70% (shared threshold).
+"""
 
 import json
 import math
@@ -52,16 +54,20 @@ def load_audio_mono(audio_path: Path, target_sr: int = 16000) -> tuple[torch.Ten
 
 def main():
     print("=" * 75)
-    print("BUILDING SUPREME CHAMPION SUBMISSION: VERSION 6 (83.75% BENCHMARK)")
+    print("BUILDING OFFICIAL RUN 2 (anhtraiAI_2 / submission_v6.json) - 83.75% DEV FAULT AVG")
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
-    if not SUB_V5_PATH.exists():
-        raise FileNotFoundError(f"Missing {SUB_V5_PATH}")
-    with open(SUB_V5_PATH, "r", encoding="utf-8") as f:
+    mos_source_path = SUB_V5_PATH if SUB_V5_PATH.exists() else ROOT / "submissions" / "submission_v2.json"
+    if not mos_source_path.exists():
+        raise FileNotFoundError(
+            f"Missing MOS source file ({SUB_V5_PATH} or submissions/submission_v2.json). "
+            "Run scripts/build_upgraded_tri_ensemble_submission.py first."
+        )
+    with open(mos_source_path, "r", encoding="utf-8") as f:
         v5_data = json.load(f)
     mos_dict = {it["file_id"]: it["quality_score"] for it in v5_data}
-    print(f"Loaded {len(mos_dict)} quality scores from SOTA Tri-Ensemble v2.")
+    print(f"Loaded {len(mos_dict)} quality scores from SOTA Tri-Ensemble ({mos_source_path.name}).")
 
     cfgs = {
         "noise": {"tf": 0.55, "tl": 0.15, "md": 0.12, "beta": +0.02},
@@ -151,7 +157,7 @@ def main():
     print(f"Packaged ZIP archive: {OUT_ZIP.resolve()} ({OUT_ZIP.stat().st_size / 1024:.2f} KB)")
 
     print("\n" + "=" * 75)
-    print("VERIFICATION & SUMMARY OF VERSION 6")
+    print("VERIFICATION & SUMMARY OF VERSION 6 (OFFICIAL RUN 2)")
     print("=" * 75)
     with zipfile.ZipFile(OUT_ZIP, "r") as zf:
         namelist = zf.namelist()

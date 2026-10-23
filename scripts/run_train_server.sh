@@ -1,12 +1,16 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
-cd /home/svs/audio_exp
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+PYTHON_BIN="${PYTHON_BIN:-python}"
+
 mkdir -p outputs checkpoints
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 echo "Starting UtmosNisqaQualityHead WavLM LoRA Training on Train+Val with Test as Dev..."
-/home/svs/miniforge3/envs/svs/bin/python scripts/train_wavlm_lora.py \
+"$PYTHON_BIN" scripts/train_wavlm_lora.py \
     --train-csv data/qualispeech/train_val.csv \
     --val-csv data/qualispeech/test.csv \
     --checkpoint-path checkpoints/wavlm_utmos_nisqa_lora_trainval_best.pt \

@@ -1,10 +1,7 @@
 """
-Autonomous Pipeline Runner for VLSP 2026 SQA.
-
-Step 1: Monitors wavlm_cache until all 14,577 samples are extracted.
-Step 2: Automatically trains FaultFrameHead (Train 10,558 / Val 2,167 / Test 1,852).
-Step 3: Automatically runs Threshold & Post-Processing Calibration on the best checkpoint.
-Step 4: Monitors server GPU VRAM and triggers WavLM LoRA training when GPU is ready.
+Script: scripts/auto_train_pipeline.py
+End-to-end training pipeline orchestrator for VLSP 2026 SQA.
+Monitors feature caching, trains fault localization frame heads, and triggers downstream training.
 """
 
 import os
@@ -22,13 +19,16 @@ PYTHON = sys.executable
 CACHE_DIR = ROOT / "data" / "qualispeech" / "wavlm_cache"
 TOTAL_SAMPLES = 14577
 
+SSH_HOST = os.environ.get("SQA_SSH_HOST", "user@remote-gpu-host")
+SSH_KEY = os.environ.get("SQA_SSH_KEY", str(Path.home() / ".ssh" / "id_ed25519"))
+
 SSH_CMD = [
     "ssh",
     "-i",
-    str(Path.home() / ".ssh" / "id_ed25519"),
+    SSH_KEY,
     "-o",
     "ConnectTimeout=10",
-    "svs@10.174.1.69",
+    SSH_HOST,
 ]
 
 
@@ -55,45 +55,18 @@ def run_fault_head_training():
     print("=" * 70)
     cmd = [
         PYTHON,
-        str(ROOT / "scripts" / "train_fault_frame_head.py"),
-        "--train-csv",
-        "data/qualispeech/train.csv",
-        "--val-csv",
-        "data/qualispeech/val.csv",
-        "--test-csv",
-        "data/qualispeech/test.csv",
-        "--epochs",
-        "20",
+        str(ROOT / "scripts" / "train_fault_head_v5.py"),
     ]
     print("Running command:", " ".join(cmd))
     proc = subprocess.run(cmd, cwd=str(ROOT))
     if proc.returncode != 0:
-        raise RuntimeError("train_fault_frame_head.py failed!")
+        raise RuntimeError("train_fault_head_v5.py failed!")
     print("\n-> FaultFrameHead training completed successfully!")
-
-
-def run_threshold_calibration():
-    print("\n" + "=" * 70)
-    print("PHASE 3: RUNNING THRESHOLD & POST-PROCESSING CALIBRATION")
-    print("=" * 70)
-    cmd = [
-        PYTHON,
-        str(ROOT / "scripts" / "calibrate_thresholds.py"),
-        "--val-csv",
-        "data/qualispeech/val.csv",
-        "--test-csv",
-        "data/qualispeech/test.csv",
-    ]
-    print("Running command:", " ".join(cmd))
-    proc = subprocess.run(cmd, cwd=str(ROOT))
-    if proc.returncode != 0:
-        raise RuntimeError("calibrate_thresholds.py failed!")
-    print("\n-> Threshold calibration completed successfully!")
 
 
 def monitor_and_train_server(target_free_mb=18000, poll_seconds=30):
     print("\n" + "=" * 70)
-    print(f"PHASE 4: MONITORING SERVER GPU (svs@10.174.1.69) UNTIL FREE >= {target_free_mb} MB")
+    print(f"PHASE 3: MONITORING REMOTE GPU HOST ({SSH_HOST}) UNTIL FREE >= {target_free_mb} MB")
     print("=" * 70)
 
     while True:
@@ -133,12 +106,11 @@ def monitor_and_train_server(target_free_mb=18000, poll_seconds=30):
 
 
 def main():
-    print("STARTING AUTONOMOUS END-TO-END PIPELINE")
+    print("STARTING PIPELINE ORCHESTRATOR")
     wait_for_cache()
     run_fault_head_training()
-    run_threshold_calibration()
     monitor_and_train_server()
-    print("\nALL PHASES COMPLETED AUTONOMOUSLY!")
+    print("\nALL PHASES COMPLETED!")
 
 
 if __name__ == "__main__":

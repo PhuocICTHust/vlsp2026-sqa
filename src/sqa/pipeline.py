@@ -25,7 +25,7 @@ TARGET_SAMPLE_RATE = 16_000
 def load_audio_mono_16k(path: str | Path) -> tuple[np.ndarray, float]:
     data, sr = sf.read(str(path), dtype="float32", always_2d=False)
     if data.ndim > 1:
-        data = data.mean(axis=1)  # ép mono
+        data = data.mean(axis=1)  # convert to mono
     if sr != TARGET_SAMPLE_RATE:
         duration = len(data) / sr
         n_target = int(round(duration * TARGET_SAMPLE_RATE))

@@ -1,6 +1,6 @@
 """
-Train Conformer Frame Decoder Fault Head for 25 Epochs.
-Tìm điểm bão hòa thực sự của Conformer trên 2,000 files tiếng Việt có WavLM cache.
+Script: scripts/train_conformer_25epochs.py
+Train Conformer Peak Fault Localization Head (25 Epochs) on Vietnamese augmented speech.
 """
 
 import json
@@ -11,8 +11,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
-if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
-if str(SRC) not in sys.path: sys.path.insert(0, str(SRC))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -23,31 +25,33 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from sqa.evaluator import FAULT_TYPES, compute_f1_macro, compute_frame_iou_macro
-from sqa.frame_grid import MODEL_GRID, EVALUATOR_GRID
+from sqa.frame_grid import EVALUATOR_GRID, MODEL_GRID
 from sqa.postprocess import BASELINE_POSTPROCESS, predict_fault_type, serialize_intervals
 from scripts.train_fault_head_v5 import (
     CombinedCachedDataset,
-    fault_collate_fn,
-    compute_focal_bce_loss,
-    compute_soft_iou_loss,
-    compute_presence_loss,
-    OLD_DIR,
-    NEW_DIR,
-    TEST_DIR,
     DEVICE,
+    NEW_DIR,
+    OLD_DIR,
+    TEST_DIR,
+    compute_focal_bce_loss,
+    compute_presence_loss,
+    compute_soft_iou_loss,
+    fault_collate_fn,
 )
 from scripts.train_conformer_fault_head import ConformerFaultHead
 
+
 def main():
     print("=" * 75)
-    print("HUẤN LUYỆN CONFORMER FRAME DECODER 25 EPOCHS (TÌM ĐIỂM BÃO HÒA)")
+    print("TRAINING CONFORMER PEAK FAULT HEAD (25 EPOCHS)")
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
     old_items = []
     with open(OLD_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = OLD_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             if pt_path.exists():
@@ -56,7 +60,8 @@ def main():
     new_items = []
     with open(NEW_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = NEW_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             if pt_path.exists():
@@ -68,7 +73,8 @@ def main():
     test_items = []
     with open(TEST_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = TEST_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             test_items.append({"file_id": item["file_id"], "pt_path": pt_path, "fault_dict": item["faults"]})
@@ -136,15 +142,16 @@ def main():
         if comp > best_score:
             best_score = comp
             best_epoch = ep
-            marker = " [★ NEW BEST]"
+            marker = " [NEW BEST]"
             torch.save(model.state_dict(), "outputs/fault_head_v5/best_conformer_25ep.pt")
 
         print(f"Epoch {ep:2d}/{epochs} | Loss: {train_loss:.4f} | Val F1: {f1:.4f} | Val IoU: {iou:.4f} | Combined: {comp*100:.2f}%{marker}")
 
     print("\n" + "=" * 75)
-    print(f"Hoàn tất 25 epochs trong {time.time() - t0:.1f}s.")
-    print(f"Điểm cao nhất: {best_score*100:.2f}% tại Epoch {best_epoch}!")
+    print(f"Completed 25 epochs in {time.time() - t0:.1f}s.")
+    print(f"Best validation score: {best_score*100:.2f}% at Epoch {best_epoch}")
     print("=" * 75)
+
 
 if __name__ == "__main__":
     main()

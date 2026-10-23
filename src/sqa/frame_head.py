@@ -51,7 +51,7 @@ class _ConvBlock(nn.Module):
         self.drop = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor, mask_f: torch.Tensor) -> torch.Tensor:
-        y = self.norm(x) * mask_f  # padding = 0 trước conv
+        y = self.norm(x) * mask_f  # zero out padded frames before conv
         y = self.conv(y.transpose(1, 2)).transpose(1, 2)
         y = self.drop(F.gelu(y))
         return (x + y) * mask_f

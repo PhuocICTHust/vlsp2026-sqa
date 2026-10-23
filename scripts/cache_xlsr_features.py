@@ -1,6 +1,7 @@
 import sys
 import time
 from pathlib import Path
+import numpy as np
 import soundfile as sf
 import torch
 from transformers import AutoModel
@@ -72,7 +73,7 @@ def main():
 
     extract_folder(ROOT / "data" / "vietnamese_aug" / "wav", ROOT / "data" / "vietnamese_aug" / "xlsr_cache", model)
 
-    print("\n★ HOÀN TẤT TRÍCH XUẤT TOÀN BỘ XLS-R CACHE!", flush=True)
+    print("\nXLS-R feature extraction completed successfully!", flush=True)
 
 if __name__ == "__main__":
     main()

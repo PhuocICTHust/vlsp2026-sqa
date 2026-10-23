@@ -90,7 +90,7 @@ def intervals_to_model_frame_targets(
 
 
 MODEL_GRID = ModelFrameGrid(
-    frame_hop_sec=WAVLM_HOP_SAMPLES / SAMPLE_RATE,  # 320 sample = 20 ms, không fit
+    frame_hop_sec=WAVLM_HOP_SAMPLES / SAMPLE_RATE,  # 320 samples = 20 ms
     offset_sec=0.0,
     frame_duration_sec=WAVLM_RECEPTIVE_FIELD_SAMPLES / SAMPLE_RATE,
     source="theoretical_conv_stride_320",

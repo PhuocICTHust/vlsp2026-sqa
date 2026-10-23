@@ -44,6 +44,6 @@ class FeatureCache:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = path.with_suffix(".npz.tmp")
         np.savez_compressed(tmp_path, features=features)
-        tmp_path.replace(path)  # ghi nguyên tử — tránh cache half-written nếu bị ngắt giữa chừng
+        tmp_path.replace(path)  # atomic write to avoid corrupted partial cache files
         meta_path = path.with_suffix(".json")
         meta_path.write_text(json.dumps(asdict(key), indent=2))

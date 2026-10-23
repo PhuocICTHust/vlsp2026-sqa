@@ -1,3 +1,9 @@
+"""
+Script: scripts/train_all_dual_backbones.py
+Train remaining Dual-Backbone architectures (Conformer-Pro and Decoupled Tri-Branch)
+on fused 2048-dim WavLM + XLS-R representations.
+"""
+
 import json
 import math
 import sys
@@ -6,8 +12,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
-if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
-if str(SRC) not in sys.path: sys.path.insert(0, str(SRC))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -19,20 +27,21 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from sqa.evaluator import FAULT_TYPES, compute_f1_macro, compute_frame_iou_macro
-from sqa.frame_grid import MODEL_GRID, EVALUATOR_GRID
+from sqa.frame_grid import EVALUATOR_GRID, MODEL_GRID
 from sqa.postprocess import BASELINE_POSTPROCESS, PostProcessConfig, predict_fault_type, serialize_intervals
 from scripts.train_fault_head_v5 import (
-    compute_focal_bce_loss,
-    compute_soft_iou_loss,
-    compute_presence_loss,
-    OLD_DIR,
-    NEW_DIR,
-    TEST_DIR,
     DEVICE,
+    NEW_DIR,
+    OLD_DIR,
+    TEST_DIR,
+    compute_focal_bce_loss,
+    compute_presence_loss,
+    compute_soft_iou_loss,
 )
 from scripts.train_dual_backbone_conformer import DualCachedDataset, dual_collate_fn
-from scripts.train_conformer_pro import ConformerProFaultHead, compute_boundary_loss, apply_spec_augment
+from scripts.train_conformer_pro import ConformerProFaultHead, apply_spec_augment, compute_boundary_loss
 from scripts.train_decoupled_fault_head import DecoupledFaultHead
+
 
 def load_datasets():
     train_items = []
@@ -40,7 +49,8 @@ def load_datasets():
         l_path = p_dir / "labels.jsonl"
         with open(l_path, "r", encoding="utf-8") as f:
             for line in f:
-                if not line.strip(): continue
+                if not line.strip():
+                    continue
                 it = json.loads(line)
                 stem = Path(it["file_id"]).stem
                 wp = p_dir / "wavlm_cache" / f"{stem}.pt"
@@ -56,7 +66,8 @@ def load_datasets():
     test_items = []
     with open(TEST_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             it = json.loads(line)
             stem = Path(it["file_id"]).stem
             wp = TEST_DIR / "wavlm_cache" / f"{stem}.pt"
@@ -71,9 +82,10 @@ def load_datasets():
 
     return train_items, test_items
 
+
 def train_dual_conformer_pro(train_loader, val_loader):
     print("\n" + "=" * 70, flush=True)
-    print("1. HUẤN LUYỆN DUAL-BACKBONE CONFORMER-PRO (MULTI-SCALE + BOUNDARY LOSS)", flush=True)
+    print("1. TRAINING DUAL-BACKBONE CONFORMER-PRO (MULTI-SCALE + BOUNDARY LOSS)", flush=True)
     print("=" * 70, flush=True)
 
     model = ConformerProFaultHead(input_dim=2048, hidden_dim=256, num_blocks=2).to(DEVICE)
@@ -132,7 +144,7 @@ def train_dual_conformer_pro(train_loader, val_loader):
         marker = ""
         if comp > best_score:
             best_score = comp
-            marker = " [★ BEST]"
+            marker = " [NEW BEST]"
             torch.save(model.state_dict(), ROOT / "outputs" / "fault_head_v5" / "best_dual_conformer_pro.pt")
 
         print(f"  Epoch {ep:2d}/{epochs} | Loss: {train_loss:.4f} | F1: {f1:.4f} | IoU: {iou:.4f} | Fault: {comp*100:.2f}%{marker}", flush=True)
@@ -140,9 +152,10 @@ def train_dual_conformer_pro(train_loader, val_loader):
     print(f"Dual-Backbone Conformer-Pro Best: {best_score*100:.2f}%", flush=True)
     return best_score
 
+
 def train_dual_decoupled(train_loader, val_loader):
     print("\n" + "=" * 70, flush=True)
-    print("2. HUẤN LUYỆN DUAL-BACKBONE DECOUPLED TRI-BRANCH (TCN + BiLSTM)", flush=True)
+    print("2. TRAINING DUAL-BACKBONE DECOUPLED TRI-BRANCH (TCN + BiLSTM)", flush=True)
     print("=" * 70, flush=True)
 
     model = DecoupledFaultHead(input_dim=2048, branch_dim=128).to(DEVICE)
@@ -199,7 +212,7 @@ def train_dual_decoupled(train_loader, val_loader):
         marker = ""
         if comp > best_score:
             best_score = comp
-            marker = " [★ BEST]"
+            marker = " [NEW BEST]"
             torch.save(model.state_dict(), ROOT / "outputs" / "fault_head_v5" / "best_dual_decoupled.pt")
 
         print(f"  Epoch {ep:2d}/{epochs} | Loss: {train_loss:.4f} | F1: {f1:.4f} | IoU: {iou:.4f} | Fault: {comp*100:.2f}%{marker}", flush=True)
@@ -207,21 +220,23 @@ def train_dual_decoupled(train_loader, val_loader):
     print(f"Dual-Backbone Decoupled Best: {best_score*100:.2f}%", flush=True)
     return best_score
 
+
 def main():
     print("=" * 70, flush=True)
-    print("HUẤN LUYỆN TOÀN BỘ CÁC KIẾN TRÚC VỚI DUAL-BACKBONE (2048 CHIỀU)", flush=True)
+    print("TRAINING ALL DUAL-BACKBONE ARCHITECTURES (2048-DIMENSIONAL)", flush=True)
     print("=" * 70, flush=True)
-    
+
     train_items, test_items = load_datasets()
     print(f"Train samples: {len(train_items)} | Val samples: {len(test_items)}", flush=True)
-    
+
     train_loader = DataLoader(DualCachedDataset(train_items), batch_size=16, shuffle=True, collate_fn=dual_collate_fn)
     val_loader = DataLoader(DualCachedDataset(test_items), batch_size=16, shuffle=False, collate_fn=dual_collate_fn)
-    
+
     t0 = time.time()
     train_dual_conformer_pro(train_loader, val_loader)
     train_dual_decoupled(train_loader, val_loader)
-    print(f"\n★ Hoàn tất huấn luyện cả 2 mô hình trong {time.time()-t0:.1f}s!", flush=True)
+    print(f"\nTraining completed for both architectures in {time.time()-t0:.1f}s!", flush=True)
+
 
 if __name__ == "__main__":
     main()

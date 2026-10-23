@@ -1,13 +1,13 @@
 """
-Experiment 2: Decoupled Tri-Branch Fault Head Architecture.
-Tách 3 nhánh độc lập hoàn toàn cho 3 loại lỗi:
-1. Nhánh Distortion: TCN với kernel nhỏ (kernel 3, dilations 1, 2) cho các xung méo vi mô.
-2. Nhánh Noise: TCN với kernel lớn (kernel 7, dilations 1, 2, 4) cho tạp âm nền.
-3. Nhánh Pause: BiLSTM (128-d) cho ngữ cảnh thời gian ngắt nghỉ dài.
-Huấn luyện trên 2,000 files gộp và kiểm tra trên Gold Test Set (125 clips).
+Script: scripts/train_decoupled_fault_head.py
+Train Decoupled Tri-Branch Fault Localization Head (10 Epochs) on Vietnamese augmented speech.
+  - Distortion branch: Short receptive-field TCN (kernel 3, dilations 1, 2)
+  - Noise branch: Multi-scale dilated TCN (kernel 7, dilations 1, 2, 4)
+  - Unnatural Pause branch: Temporal BiLSTM (128-d)
 """
 
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -29,19 +29,20 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from sqa.evaluator import FAULT_TYPES, compute_f1_macro, compute_frame_iou_macro
-from sqa.frame_grid import MODEL_GRID, EVALUATOR_GRID
+from sqa.frame_grid import EVALUATOR_GRID, MODEL_GRID
 from sqa.postprocess import BASELINE_POSTPROCESS, PostProcessConfig, predict_fault_type, serialize_intervals
 from scripts.train_fault_head_v5 import (
     CombinedCachedDataset,
-    fault_collate_fn,
-    compute_focal_bce_loss,
-    compute_soft_iou_loss,
-    compute_presence_loss,
-    OLD_DIR,
-    NEW_DIR,
-    TEST_DIR,
     DEVICE,
+    NEW_DIR,
+    OLD_DIR,
+    TEST_DIR,
+    compute_focal_bce_loss,
+    compute_presence_loss,
+    compute_soft_iou_loss,
+    fault_collate_fn,
 )
+
 
 class _ConvBlock(nn.Module):
     def __init__(self, dim: int, kernel_size: int, dilation: int, dropout: float = 0.1):
@@ -55,6 +56,7 @@ class _ConvBlock(nn.Module):
         y = self.conv(y.transpose(1, 2)).transpose(1, 2)
         y = self.drop(F.gelu(y))
         return (x + y) * mask_f
+
 
 class DecoupledFaultHead(nn.Module):
     def __init__(self, input_dim: int = 1024, branch_dim: int = 128):
@@ -108,16 +110,18 @@ class DecoupledFaultHead(nn.Module):
         logits = torch.cat([logit_noise, logit_dist, logit_pause], dim=-1)
         return logits.masked_fill(~mask.unsqueeze(-1), -30.0)
 
+
 def main():
     print("=" * 75)
-    print("THỬ NGHIỆM KIẾN TRÚC MỚI: DECOUPLED TRI-BRANCH FAULT HEAD")
+    print("TRAINING DECOUPLED TRI-BRANCH FAULT HEAD (10 EPOCHS)")
     print("=" * 75)
     print(f"Device: {DEVICE}")
 
     old_items = []
     with open(OLD_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = OLD_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             if pt_path.exists():
@@ -126,7 +130,8 @@ def main():
     new_items = []
     with open(NEW_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = NEW_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             if pt_path.exists():
@@ -138,7 +143,8 @@ def main():
     test_items = []
     with open(TEST_DIR / "labels.jsonl", "r", encoding="utf-8") as f:
         for line in f:
-            if not line.strip(): continue
+            if not line.strip():
+                continue
             item = json.loads(line)
             pt_path = TEST_DIR / "wavlm_cache" / f"{Path(item['file_id']).stem}.pt"
             test_items.append({"file_id": item["file_id"], "pt_path": pt_path, "fault_dict": item["faults"]})
@@ -202,14 +208,15 @@ def main():
         f1, _ = compute_f1_macro(preds, gts)
         iou, _ = compute_frame_iou_macro(preds, gts, durs, EVALUATOR_GRID)
         comp = 0.5 * f1 + 0.5 * iou
-        marker = " [★ NEW BEST]" if comp > best_score else ""
+        marker = " [NEW BEST]" if comp > best_score else ""
         if comp > best_score:
             best_score = comp
             torch.save(model.state_dict(), "outputs/fault_head_v5/best_decoupled_fault_head.pt")
 
         print(f"Epoch {ep:2d}/{epochs} | Loss: {train_loss:.4f} | Val F1: {f1:.4f} | Val IoU: {iou:.4f} | Combined: {comp*100:.2f}%{marker}")
 
-    print(f"\nHoàn tất trong {time.time() - t0:.1f}s. Điểm cao nhất Decoupled Head: {best_score*100:.2f}%")
+    print(f"\nTraining completed in {time.time() - t0:.1f}s. Best validation score: {best_score*100:.2f}%")
+
 
 if __name__ == "__main__":
     main()
