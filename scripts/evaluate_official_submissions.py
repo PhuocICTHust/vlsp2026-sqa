@@ -31,6 +31,7 @@ from sqa.evaluator import (
     FAULT_TYPES,
     compute_f1_macro,
     compute_frame_iou_macro,
+    compute_pcc,
     final_score,
 )
 from sqa.frame_grid import EVALUATOR_GRID
@@ -239,11 +240,14 @@ def main():
 
     runs_metrics = []
     for r in range(1, 6):
-        sub = load_submission(r)
+        sub_raw = load_submission(r)
+        sub_by_id = {x['file_id']: x for x in sub_raw}
+        assert len(sub_by_id) == len(gt), f'Submission {r} has {len(sub_by_id)} clips, GT has {len(gt)}'
+        sub = [sub_by_id[x['file_id']] for x in gt]
         f1_m, f1_d = compute_f1_macro(sub, gt)
         iou_m, iou_d = compute_frame_iou_macro(sub, gt, durations, EVALUATOR_GRID)
         sub_mos = np.array([x["quality_score"] for x in sub], dtype=np.float64)
-        pcc = float(np.corrcoef(sub_mos, gt_mos)[0, 1])
+        pcc = float(compute_pcc(sub_mos, gt_mos))
         score = final_score(pcc, f1_m, iou_m)
         conf = compute_confusion(sub, gt)
         runs_metrics.append({

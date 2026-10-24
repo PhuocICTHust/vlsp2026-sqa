@@ -52,7 +52,7 @@ def load_audio_mono(audio_path: Path, target_sr: int = 16000) -> tuple[torch.Ten
 
 def main():
     print("=" * 80)
-    print("BUILDING OFFICIAL RUN 5 (anhtraiAI_5 / submission_v12.json) - 0.8229 COMPOSITE DEV / 0.525695 PRIVATE TEST")
+    print("BUILDING OFFICIAL RUN 5 (anhtraiAI_5 / submission_v12.json) - 0.8229 COMPOSITE DEV / 0.524251 PRIVATE TEST")
     print("=" * 80)
     print(f"Device: {DEVICE}")
 

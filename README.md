@@ -53,9 +53,9 @@ $$\text{Final Score} = 0.40 \times \text{PCC}_{\text{MOS}} + 0.30 \times \text{F
 ```
 
 ### Core Components
-1. **SLSQP-Blended Tri-Ensemble MOS Head**: Combines three 1024-d Attention-weighted Statistics Pooling (ASP) models trained on English `QualiSpeech` (`trainval`, 12,725 clips): (i) `WavLM-Large` fine-tuned with LoRA ($r=16, \alpha=32$) and a composite MSE+CCC+PCC+Ranking objective, (ii) frozen `WavLM-Large` ASP, and (iii) `wav2vec2-XLS-R-300M` ASP (publicly hosted at [`vdmhth123/vlsp2026-sqa-wav2vec2-xls-r-300m-utmos-trainval`](https://huggingface.co/vdmhth123/vlsp2026-sqa-wav2vec2-xls-r-300m-utmos-trainval)). Convex weights ($0.247, 0.364, 0.389$) fit on the 1,852-clip held-out `QualiSpeech` test split achieve $\text{PCC}_{\text{MOS}} = 0.7325$ on `QualiSpeech` test and $0.7031$ zero-shot on the Vietnamese Private Test.
+1. **SLSQP-Blended Tri-Ensemble MOS Head**: Combines three 1024-d Attention-weighted Statistics Pooling (ASP) models trained on English `QualiSpeech` (`trainval`, 12,725 clips): (i) `WavLM-Large` fine-tuned with LoRA ($r=16, \alpha=32$) and a composite MSE+CCC+PCC+Ranking objective, (ii) frozen `WavLM-Large` ASP, and (iii) `wav2vec2-XLS-R-300M` fine-tuned with LoRA ($r=16, \alpha=32$) and an ASP head (publicly hosted at [`vdmhth123/vlsp2026-sqa-wav2vec2-xls-r-300m-utmos-trainval`](https://huggingface.co/vdmhth123/vlsp2026-sqa-wav2vec2-xls-r-300m-utmos-trainval)). Convex weights ($0.247, 0.364, 0.389$) fit on the 1,852-clip `QualiSpeech` test split (not a clean hold-out: it is also used for epoch selection and blending, so these numbers are in-sample) achieve $\text{PCC}_{\text{MOS}} = 0.7325$ on `QualiSpeech` test and $0.7031$ zero-shot on the Vietnamese Private Test.
 2. **Cross-Backbone Dual Foundation Latents (2048-dim)**: Concatenating frame-level `WavLM-Large` (1024-d) and `XLS-R-300M` (1024-d) representations allows the Conformer decoder to jointly model physical channel degradations and Vietnamese tonal phonetics.
-3. **Heterogeneous Localization Decoders**: Combines standard `Conformer` ($k=15$, 10-epoch and 25-epoch Peak checkpoints), `Conformer-Pro` (parallel depthwise convolutions $k \in \{5, 15, 31\}$), `DualBackboneConformer` (2048-d), and `DecoupledFaultHead` (dedicated $k=3$ CNN for distortion, dilated $k=7$ TCN for noise, and BiLSTM for pause).
+3. **Complementary Localization Decoders**: Combines standard `Conformer` ($k=15$, 10-epoch and 25-epoch Peak checkpoints), `Conformer-Pro` (parallel depthwise convolutions $k \in \{5, 15, 31\}$), `DualBackboneConformer` (2048-d), and `DecoupledFaultHead` (dedicated $k=3$ CNN for distortion, dilated $k=7$ TCN for noise, and BiLSTM for pause).
 4. **Programmatic Vietnamese Degradation Engine**: Synthesizes 2,000 training utterances (`vietnamese_aug` + `vietnamese_aug_v3/train`) and a 125-clip Vietnamese development benchmark (`vietnamese_test_v1`) from clean Vietnamese speech (`VIVOS`, `Common Voice`, and TTS) with exact programmatic interval labels and 422 ($21.1\%$) clean negative anchors.
 
 ---
@@ -114,8 +114,6 @@ vlsp2026-sqa/
 │       ├── postprocess.py                         # Two-tier hysteresis & interval normalization
 │       └── validator.py                           # Official JSON submission validator
 │
-├── paper/
-│   └── paper_lncs.tex                             # System paper in Springer LNCS format
 ├── .gitignore
 ├── pyproject.toml
 └── README.md
@@ -134,7 +132,7 @@ conda create -n vlsp2026-sqa python=3.10 -y
 conda activate vlsp2026-sqa
 
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-pip install transformers soundfile scipy pandas numpy scikit-learn tqdm safetensors huggingface_hub resampy
+pip install transformers peft soundfile scipy pandas numpy scikit-learn tqdm safetensors huggingface_hub resampy matplotlib
 pip install -e .
 ```
 
