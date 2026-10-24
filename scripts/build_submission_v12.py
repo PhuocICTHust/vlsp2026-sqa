@@ -1,6 +1,6 @@
 """Submission generator for Official Run 5 (anhtraiAI_5.zip / submission_v12.json).
 Vietnamese Synthetic Dev Set (125 clips) Fault Avg: 88.32% (per-run) / 87.52% (shared), Composite Dev Score: 0.8229.
-Official Private Test Final Score: 0.525695.
+Official Private Test Final Score: 0.524251.
 """
 
 import json

@@ -149,23 +149,23 @@ def print_table_6(runs_metrics: List[dict]):
 
     dist_val = r4["iou_d"]["distortion"]
     dist_str = f"{dist_val:.4f}"
-    dist_gap = f"{dist_val - 0.8245:+.4f}"
+    dist_gap = f"{dist_val - 0.8661:+.4f}"
 
     noise_val = r4["iou_d"]["noise"]
     noise_str = f"{noise_val:.4f}"
-    noise_gap = f"{noise_val - 0.8124:+.4f}"
+    noise_gap = f"{noise_val - 0.8339:+.4f}"
 
     pause_val = r4["iou_d"]["unnatural_pause"]
     pause_str = f"{pause_val:.4f}"
-    pause_gap = f"{pause_val - 0.7589:+.4f}"
+    pause_gap = f"{pause_val - 0.8653:+.4f}"
 
     iou_m_val = r4["iou_m"]
     iou_m_str = f"{iou_m_val:.4f}"
-    iou_m_gap = f"{iou_m_val - 0.7986:+.4f}"
+    iou_m_gap = f"{iou_m_val - 0.8551:+.4f}"
 
     f1_m_val = r4["f1_m"]
     f1_m_str = f"{f1_m_val:.4f}"
-    f1_m_gap = f"{f1_m_val - 0.9416:+.4f}"
+    f1_m_gap = f"{f1_m_val - 0.8948:+.4f}"
 
     score_val = r4["score"]
     score_str = f"{score_val:.6f}"
@@ -174,11 +174,11 @@ def print_table_6(runs_metrics: List[dict]):
     print(f"{'Component':<45} | {'Dev Set':<10} | {'Private Test':<12} | {'Gap':<10}")
     print("-" * 85)
     print(f"{'Utterance-Level MOS PCC':<45} | {'0.7325':<10} | {pcc_str:<12} | {pcc_gap:<10}")
-    print(f"{'Distortion IoU':<45} | {'0.8245':<10} | {dist_str:<12} | {dist_gap:<10}")
-    print(f"{'Noise IoU':<45} | {'0.8124':<10} | {noise_str:<12} | {noise_gap:<10}")
-    print(f"{'Unnatural Pause IoU':<45} | {'0.7589':<10} | {pause_str:<12} | {pause_gap:<10}")
-    print(f"{'Macro-Average IoU':<45} | {'0.7986':<10} | {iou_m_str:<12} | {iou_m_gap:<10}")
-    print(f"{'Macro-Average F1':<45} | {'0.9416':<10} | {f1_m_str:<12} | {f1_m_gap:<10}")
+    print(f"{'Distortion IoU':<45} | {'0.8661':<10} | {dist_str:<12} | {dist_gap:<10}")
+    print(f"{'Noise IoU':<45} | {'0.8339':<10} | {noise_str:<12} | {noise_gap:<10}")
+    print(f"{'Unnatural Pause IoU':<45} | {'0.8653':<10} | {pause_str:<12} | {pause_gap:<10}")
+    print(f"{'Macro-Average IoU':<45} | {'0.8551':<10} | {iou_m_str:<12} | {iou_m_gap:<10}")
+    print(f"{'Macro-Average F1':<45} | {'0.8948':<10} | {f1_m_str:<12} | {f1_m_gap:<10}")
     print(f"{'Composite Overall Score':<45} | {'0.8180':<10} | {score_str:<12} | {score_gap:<10}")
 
 
