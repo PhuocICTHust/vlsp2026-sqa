@@ -126,7 +126,8 @@ def main():
                 ivs, _, _, _ = predict_fault_type(probs_ens[:, c_idx], MODEL_GRID, dur, cfg)
                 clip_faults[ft] = serialize_intervals(ivs, round_digits=2, duration=dur)
 
-            q_score = mos_dict.get(wav_path.name, 3.50)
+            assert wav_path.name in mos_dict, f"Missing MOS score for {wav_path.name}"
+            q_score = mos_dict[wav_path.name]
             final_submissions.append({
                 "file_id": wav_path.name,
                 "quality_score": round(float(q_score), 4),

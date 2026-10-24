@@ -127,7 +127,8 @@ def main():
                 ivs, _, _, _ = predict_fault_type(probs_ens[:, c_idx], MODEL_GRID, dur, post_cfg)
                 clip_faults[ft] = serialize_intervals(ivs, round_digits=2, duration=dur)
 
-            q_score = mos_dict.get(fname, 3.50)
+            assert fname in mos_dict, f"Missing MOS score for {fname}"
+            q_score = mos_dict[fname]
             final_submissions.append({
                 "file_id": fname,
                 "quality_score": round(float(q_score), 4),

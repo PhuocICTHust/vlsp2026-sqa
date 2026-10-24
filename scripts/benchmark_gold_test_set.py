@@ -129,7 +129,7 @@ def evaluate_probs(
     f1_macro, f1_details = compute_f1_macro(ordered_preds, gts)
     iou_macro, iou_details = compute_frame_iou_macro(ordered_preds, gts, durations, EVALUATOR_GRID)
     fault_avg = 0.5 * (f1_macro + iou_macro)
-    composite_dev = 0.5 * QUALISPEECH_DEV_PCC_MOS + 0.25 * f1_macro + 0.25 * iou_macro
+    composite_dev = 0.40 * QUALISPEECH_DEV_PCC_MOS + 0.30 * f1_macro + 0.30 * iou_macro
     return {
         "f1_macro": f1_macro,
         "f1_details": f1_details,
@@ -201,7 +201,11 @@ def main():
     # 1. Shared Static Thresholds (Table 2 column 'Shared-Threshold Fault Avg' & Table 6 Dev column)
     with open(ROOT / "outputs" / "fault_head_trainval" / "calibrated_postprocess_config.json", "r", encoding="utf-8") as f:
         raw_v1_cfg = json.load(f)
-    cfg_v1 = {ft: PostProcessConfig.from_dict(raw_v1_cfg[ft]) for ft in FAULT_TYPES}
+    cal_dict = raw_v1_cfg.get("calibrated_configs", raw_v1_cfg)
+    cfg_v1 = {
+        ft: PostProcessConfig(**{k: v for k, v in cal_dict[ft].items() if k != "is_baseline"})
+        for ft in FAULT_TYPES
+    }
 
     shared_vi_cfg = {
         "noise": PostProcessConfig(tau_frame=0.45, tau_low=0.25, use_hysteresis=True, min_duration=0.08, merge_gap=0.04),
@@ -261,7 +265,7 @@ def main():
         f1_macro, f1_details = compute_f1_macro(ordered_preds, gts)
         iou_macro, iou_details = compute_frame_iou_macro(ordered_preds, gts, durations, EVALUATOR_GRID)
         fault_avg = 0.5 * (f1_macro + iou_macro)
-        composite_dev = 0.5 * QUALISPEECH_DEV_PCC_MOS + 0.25 * f1_macro + 0.25 * iou_macro
+        composite_dev = 0.40 * QUALISPEECH_DEV_PCC_MOS + 0.30 * f1_macro + 0.30 * iou_macro
         return {
             "f1_macro": f1_macro,
             "f1_details": f1_details,

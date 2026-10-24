@@ -62,81 +62,75 @@ class ConformerConvModule(nn.Module):
         x = F.glu(x, dim=1)  # [B, D, T]
         x = self.depthwise_conv(x)
         x = self.batch_norm(x)
-        x = F.silu(x)
+        x = F.gelu(x)
         x = self.pointwise_conv2(x)
         x = self.dropout(x)
         x = x.transpose(1, 2)  # [B, T, D]
         return (res + x) * mask_f
 
 
-class ConformerFeedForward(nn.Module):
-    def __init__(self, dim: int, mult: int = 4, dropout: float = 0.1):
-        super().__init__()
-        self.layer_norm = nn.LayerNorm(dim)
-        self.linear1 = nn.Linear(dim, dim * mult)
-        self.dropout1 = nn.Dropout(dropout)
-        self.linear2 = nn.Linear(dim * mult, dim)
-        self.dropout2 = nn.Dropout(dropout)
-
-    def forward(self, x: torch.Tensor, mask_f: torch.Tensor) -> torch.Tensor:
-        res = x
-        x = self.layer_norm(x) * mask_f
-        x = self.linear1(x)
-        x = F.silu(x)
-        x = self.dropout1(x)
-        x = self.linear2(x)
-        x = self.dropout2(x)
-        return (res + 0.5 * x) * mask_f
-
-
 class ConformerBlock(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 4, conv_kernel: int = 15, dropout: float = 0.1):
+    def __init__(self, dim: int = 256, num_heads: int = 4, conv_kernel: int = 15, dropout: float = 0.1):
         super().__init__()
-        self.ff1 = ConformerFeedForward(dim, mult=4, dropout=dropout)
-        self.norm_attn = nn.LayerNorm(dim)
-        self.self_attn = nn.MultiheadAttention(dim, num_heads, dropout=dropout, batch_first=True)
-        self.drop_attn = nn.Dropout(dropout)
-        self.conv = ConformerConvModule(dim, kernel_size=conv_kernel, dropout=dropout)
-        self.ff2 = ConformerFeedForward(dim, mult=4, dropout=dropout)
+        self.ffn1_norm = nn.LayerNorm(dim)
+        self.ffn1 = nn.Sequential(
+            nn.Linear(dim, dim * 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(dim * 2, dim),
+            nn.Dropout(dropout),
+        )
+
+        self.attn_norm = nn.LayerNorm(dim)
+        self.attn = nn.MultiheadAttention(dim, num_heads, dropout=dropout, batch_first=True)
+        self.attn_drop = nn.Dropout(dropout)
+
+        self.conv_module = ConformerConvModule(dim, kernel_size=conv_kernel, dropout=dropout)
+
+        self.ffn2_norm = nn.LayerNorm(dim)
+        self.ffn2 = nn.Sequential(
+            nn.Linear(dim, dim * 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(dim * 2, dim),
+            nn.Dropout(dropout),
+        )
         self.final_norm = nn.LayerNorm(dim)
 
-    def forward(self, x: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
-        mask_f = valid_mask.unsqueeze(-1).float()
-        x = self.ff1(x, mask_f)
-        normed = self.norm_attn(x)
-        attn_out, _ = self.self_attn(normed, normed, normed, key_padding_mask=~valid_mask)
-        x = (x + self.drop_attn(attn_out)) * mask_f
-        x = self.conv(x, mask_f)
-        x = self.ff2(x, mask_f)
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        mask_f = mask.unsqueeze(-1).to(x.dtype)
+        x = x + 0.5 * self.ffn1(self.ffn1_norm(x)) * mask_f
+        norm_x = self.attn_norm(x)
+        attn_out, _ = self.attn(norm_x, norm_x, norm_x, key_padding_mask=~mask)
+        x = (x + self.attn_drop(attn_out)) * mask_f
+        x = self.conv_module(x, mask_f)
+        x = x + 0.5 * self.ffn2(self.ffn2_norm(x)) * mask_f
         return self.final_norm(x) * mask_f
 
 
 class ConformerFaultHead(nn.Module):
-    def __init__(self, input_dim: int = 1024, hidden_dim: int = 256, num_blocks: int = 2, n_faults: int = 3, dropout: float = 0.1):
+    def __init__(self, input_dim: int = 1024, hidden_dim: int = 256, num_blocks: int = 2):
         super().__init__()
         self.in_proj = nn.Linear(input_dim, hidden_dim)
         self.blocks = nn.ModuleList([
-            ConformerBlock(hidden_dim, num_heads=4, conv_kernel=15, dropout=dropout)
+            ConformerBlock(dim=hidden_dim, num_heads=4, conv_kernel=15, dropout=0.1)
             for _ in range(num_blocks)
         ])
-        self.out_head = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, n_faults),
-        )
+        self.classifier = nn.Linear(hidden_dim, 3)
 
     def forward(self, h: torch.Tensor, valid_mask: torch.Tensor | None = None) -> torch.Tensor:
         b, t, _ = h.shape
         if valid_mask is None:
-            valid_mask = torch.ones((b, t), dtype=torch.bool, device=h.device)
-        mask_f = valid_mask.unsqueeze(-1).float()
+            mask = torch.ones(b, t, dtype=torch.bool, device=h.device)
+        else:
+            mask = valid_mask.to(h.device)
+        mask_f = mask.unsqueeze(-1).to(h.dtype)
+
         x = self.in_proj(h) * mask_f
         for blk in self.blocks:
-            x = blk(x, valid_mask)
-        logits = self.out_head(x)
-        logits = logits.masked_fill(~valid_mask.unsqueeze(-1), -30.0)
-        return logits
+            x = blk(x, mask)
+        logits = self.classifier(x)
+        return logits.masked_fill(~mask.unsqueeze(-1), -30.0)
 
 
 def main():
