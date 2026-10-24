@@ -131,13 +131,13 @@ def plot_mos_scatter():
     # Ideal diagonal
     ax.plot([1.0, 5.0], [1.0, 5.0], color='#9E9E9E', linestyle=':', linewidth=1.2, label='Ideal Identity')
 
-    ax.set_xlabel('Predicted MOS ($\hat{Q}$)', fontsize=10, fontweight='bold')
-    ax.set_ylabel('Ground Truth MOS ($Q^*$)', fontsize=10, fontweight='bold')
+    ax.set_xlabel(r'Predicted MOS ($\hat{Q}$)', fontsize=10, fontweight='bold')
+    ax.set_ylabel(r'Ground Truth MOS ($Q^*$)', fontsize=10, fontweight='bold')
     ax.set_xlim(1.8, 4.4)
     ax.set_ylim(0.8, 5.0)
 
     # Info box
-    text_str = f"Private Test Set (302 clips)\n$\mathbf{{PCC}} = \mathbf{{{r:.4f}}}$\n$\mathrm{{MSE}} = {mse:.4f}$"
+    text_str = f"Private Test Set (302 clips)\n$\\mathbf{{PCC}} = \\mathbf{{{r:.4f}}}$\n$\\mathrm{{MSE}} = {mse:.4f}$"
     props = dict(boxstyle='round,pad=0.5', facecolor='#F5F5F5', edgecolor='#BDBDBD', alpha=0.95)
     ax.text(0.04, 0.96, text_str, transform=ax.transAxes, fontsize=9, verticalalignment='top', bbox=props)
 

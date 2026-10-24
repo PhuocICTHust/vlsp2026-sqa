@@ -292,6 +292,11 @@ def main():
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\nUpgraded submission successfully written to: {out_path.resolve()}")
+
+    zip_path = out_path.parent / "anhtraiAI_1.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(out_path, arcname="submission.json")
+    print(f"Packaged ZIP archive (Run 1): {zip_path.resolve()} ({zip_path.stat().st_size / 1024:.2f} KB)")
     print("=" * 70)
 
 

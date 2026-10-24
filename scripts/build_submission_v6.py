@@ -35,6 +35,7 @@ AUDIO_DIR = ROOT / "data" / "private_test" / "audio"
 SUB_V5_PATH = ROOT / "submissions" / "submission_v5.json"
 OUT_JSON = ROOT / "submissions" / "submission_v6.json"
 OUT_ZIP = ROOT / "submissions" / "anhtraiAI_6.zip"
+OFFICIAL_ZIP = ROOT / "submissions" / "anhtraiAI_2.zip"
 
 
 def load_audio_mono(audio_path: Path, target_sr: int = 16000) -> tuple[torch.Tensor, float, float]:
@@ -153,8 +154,9 @@ def main():
         json.dump(final_submissions, f, indent=2, ensure_ascii=False)
     print(f"\nSaved submission JSON: {OUT_JSON.resolve()}")
 
-    with zipfile.ZipFile(OUT_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(OUT_JSON, arcname="submission.json")
+    for zpath in [OUT_ZIP, OFFICIAL_ZIP]:
+        with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(OUT_JSON, arcname="submission.json")
     print(f"Packaged ZIP archive: {OUT_ZIP.resolve()} ({OUT_ZIP.stat().st_size / 1024:.2f} KB)")
 
     print("\n" + "=" * 75)
