@@ -56,7 +56,7 @@ $$\text{Final Score} = 0.40 \times \text{PCC}_{\text{MOS}} + 0.30 \times \text{F
 1. **SLSQP-Blended Tri-Ensemble MOS Head**: Combines three 1024-d Attention-weighted Statistics Pooling (ASP) models trained on English `QualiSpeech` (`trainval`, 12,725 clips): (i) `WavLM-Large` fine-tuned with LoRA ($r=16, \alpha=32$) and a composite MSE+CCC+PCC+Ranking objective, (ii) frozen `WavLM-Large` ASP, and (iii) `wav2vec2-XLS-R-300M` ASP (publicly hosted at [`vdmhth123/vlsp2026-sqa-wav2vec2-xls-r-300m-utmos-trainval`](https://huggingface.co/vdmhth123/vlsp2026-sqa-wav2vec2-xls-r-300m-utmos-trainval)). Convex weights ($0.247, 0.364, 0.389$) fit on the 1,852-clip held-out `QualiSpeech` test split achieve $\text{PCC}_{\text{MOS}} = 0.7325$ on `QualiSpeech` test and $0.7031$ zero-shot on the Vietnamese Private Test.
 2. **Cross-Backbone Dual Foundation Latents (2048-dim)**: Concatenating frame-level `WavLM-Large` (1024-d) and `XLS-R-300M` (1024-d) representations allows the Conformer decoder to jointly model physical channel degradations and Vietnamese tonal phonetics.
 3. **Heterogeneous Localization Decoders**: Combines standard `Conformer` ($k=15$, 10-epoch and 25-epoch Peak checkpoints), `Conformer-Pro` (parallel depthwise convolutions $k \in \{5, 15, 31\}$), `DualBackboneConformer` (2048-d), and `DecoupledFaultHead` (dedicated $k=3$ CNN for distortion, dilated $k=7$ TCN for noise, and BiLSTM for pause).
-4. **Programmatic Vietnamese Degradation Engine**: Synthesizes 2,000 training utterances (`vietnamese_aug` + `vietnamese_aug_v3/train`) and a 125-clip Vietnamese development benchmark (`vietnamese_test_v1`) from clean Vietnamese speech (`VIVOS`, `Common Voice`, `FLEURS`, and TTS) with exact programmatic interval labels and 422 ($21.1\%$) clean negative anchors.
+4. **Programmatic Vietnamese Degradation Engine**: Synthesizes 2,000 training utterances (`vietnamese_aug` + `vietnamese_aug_v3/train`) and a 125-clip Vietnamese development benchmark (`vietnamese_test_v1`) from clean Vietnamese speech (`VIVOS`, `Common Voice`, and TTS) with exact programmatic interval labels and 422 ($21.1\%$) clean negative anchors.
 
 ---
 
@@ -87,7 +87,7 @@ vlsp2026-sqa/
 │   ├── package_submission.py                      # Schema validation & zip packager
 │   │
 │   ├── augment_engine.py                          # Programmatic Vietnamese audio degradation engine
-│   ├── build_vi_test_sources.py                   # Clean Vietnamese source selector (VIVOS/CV/FLEURS/TTS)
+│   ├── build_vi_test_sources.py                   # Clean Vietnamese source selector (VIVOS/CV/TTS)
 │   ├── train_conformer_fault_head.py              # 10-epoch Conformer fault decoder
 │   ├── train_conformer_25epochs.py                # 25-epoch Conformer Peak fault decoder
 │   ├── train_conformer_pro.py                     # Multi-Scale Conformer-Pro (k=5,15,31) decoder
