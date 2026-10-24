@@ -7,6 +7,7 @@ Generate high-resolution publication-quality figures for the VLSP 2026 paper:
 
 import os
 import json
+from pathlib import Path
 import numpy as np
 import soundfile as sf
 import matplotlib
@@ -214,7 +215,13 @@ def plot_temporal_localization():
     print("Generated paper/fig_temporal_localization.pdf and .png")
 
 if __name__ == '__main__':
-    plot_architecture()
+    # Preserve modern draw.io architecture diagram if fig_architecture.drawio exists
+    drawio_file = Path('paper/fig_architecture.drawio')
+    if not drawio_file.exists():
+        plot_architecture()
+    else:
+        print("Preserving high-resolution draw.io architecture diagram (paper/fig_architecture.pdf / .png)")
+
     plot_mos_scatter()
     plot_temporal_localization()
-    print("All 3 publication figures generated successfully!")
+    print("All publication figures synchronized successfully!")
