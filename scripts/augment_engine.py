@@ -649,21 +649,14 @@ def audible_noise_events(zz: np.ndarray, p_speech: float, cfg, kind: str, params
 
 
 def apply_bed(x: np.ndarray, rng: np.random.Generator, bank: "NoiseBank", cfg, kind: str) -> tuple[np.ndarray, list[Event]]:
-    """Background layer UNDER the speech (kind 'bgm' = instrumental music, 'long' = ambience such as fan /
-    cicadas / hum / keyboard). One category, one source stream and one SNR (between active levels) per file.
-    Coverage mode per file (team review of the private test: about half of the noisy files had noise over the
-    whole / most of the clip, half only in parts, e.g. "tap am tu 2-3s", "piano tu 1.3-3.8s", "rai rac"):
-      whole   (p = --bed-p-full)    : the whole file
-      long    (p = --bed-p-long)    : one stretch of 60-90 % of the file
-      partial (the rest)            : 1-3 pieces of 0.5-4 s (total <= 60 % of the file, >= 0.3 s apart)
-    Fades 0.3 s (shorter for short pieces); labelled `noise` only where audible."""
+
     n = len(x)
     dur = n / SR
     cat = bank.pick_category(rng)
     dflt = (cfg.bgm_snr_min, cfg.bgm_snr_max) if kind == "bgm" else (cfg.bed_snr_min, cfg.bed_snr_max)
     lo, hi = _cat_lookup(cfg.category_snr, cat, dflt)
     snr = float(rng.uniform(lo, hi))
-    z, _, name, off = bank.draw(n, rng, cat=cat)              # one continuous source stream for the file
+    z, _, name, off = bank.draw(n, rng, cat=cat)             
     distant = None
     if _cat_lookup({c: True for c in cfg.distant_categories}, cat, False):   # v1 loudspeaker etc.
         z, distant = make_distant(z, rng)
@@ -1067,16 +1060,12 @@ RECIPES = {  # name -> faults applied
     "bed+pause": ("bed", "unnatural_pause"),
     "bed+distortion+pause": ("bed", "distortion", "unnatural_pause"),
 }
-# round-2 fast-track mix (private-test survey): clean 25 / distortion 40 / BGM 15 / long noise 15 / pause 5
 ROUND1_CATEGORY_WEIGHTS = '{"fan": 3, "rain": 0.4, "traffic": 0.4, "motorbike": 0.4, "horn": 0.4, "street": 0.4}'
-# round 2: the private test also has LOW-LEVEL traffic in the background -> traffic back to weight 1
-# (its SNR range is 15-25 dB via --category-snr), fan no longer x3 (bank v2 adds ceiling_fan)
 ROUND1_CATEGORY_SNR = '{"street_vendor": [10, 20], "loudspeaker": [10, 20]}'
 ROUND2_CATEGORY_SNR = ('{"street_vendor": [10, 20], "loudspeaker": [10, 20], "electrical_hum": [0, 10], '
                        '"traffic": [15, 25], "motorbike": [15, 25]}')
 ROUND2_CATEGORY_WEIGHTS = '{"fan": 1.5, "rain": 0.4, "horn": 0.4, "street": 0.4}'
 DEFAULT_RECIPE_P = {"clean": 0.25, "distortion": 0.40, "bgm": 0.15, "noise_long": 0.15, "pause": 0.05}
-# "review" mix: label co-occurrence measured on the team's 302-file listening review of the private test
 # (official labels; bgm_noise -> noise; reverb / swallow not labelled): none 28.1 %, distortion 28.5,
 # noise 17.5, pause 7.6, distortion+noise 9.3, distortion+pause 5.6, noise+pause 2.3, all three 1.0
 REVIEW_RECIPE_P = {"clean": 0.28, "distortion": 0.285, "bed": 0.175, "pause": 0.075, "bed+distortion": 0.095,
@@ -1340,7 +1329,7 @@ def main() -> None:
                    help="noise frames quieter than speech level minus this (dB) are not labelled")
     g.add_argument("--recipe-set", choices=["round2", "review", "round1"], default="round2",
                    help="round2 = clean .25 / distortion .40 / bgm .15 / noise_long .15 / pause .05 (one fault per file); "
-                        "review = label co-occurrence of the 302-file private-test review (26 %% of faulty files "
+                        "review =  multi-fault mix "
                         "have 2-3 faults); round1 = v2.7 mix")
     g.add_argument("--p-bgm", type=float, default=0.33,
                    help="recipe 'bed': P(background is music); review: 30 of 91 noise files had BGM")
