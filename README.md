@@ -62,15 +62,15 @@ $$\text{Final Score} = 0.40 \times \text{PCC}_{\text{MOS}} + 0.30 \times \text{F
 
 ## 3. Official Competition Submissions & Results (Private Test: 302 Clips)
 
-All five official submissions share the same Tri-Ensemble MOS predictions ($\text{PCC}_{\text{MOS}} = 0.703140$, stored in `submissions/submission_v2.json` and `submissions/submission_v5.json`).
+All five official submissions share the same Tri-Ensemble MOS predictions ($\text{PCC}_{\text{MOS}} = 0.703139$, stored in `submissions/submission_v2.json` and `submissions/submission_v5.json`).
 
 | Official Run | Builder Script / JSON | Fault Localization Architecture & Blending Weights | Post-Processing Mode | Dev Score (125 VN / 1,852 QS) | Official Private Test Score |
 | :--- | :--- | :--- | :--- | :---: | :---: |
-| **Run 1 (`anhtraiAI_1.zip`)** | `build_upgraded_tri_ensemble_submission.py` (`submission_v2.json`) | `1.00 FaultFrameHead` (English QualiSpeech Dilated TCN + BiLSTM) | Static (`calibrated_postprocess_config.json`) | `0.5300` | `0.520513` |
+| **Run 1 (`anhtraiAI_1.zip`)** | `build_upgraded_tri_ensemble_submission.py` (`submission_v2.json`) | `1.00 FaultFrameHead` (English QualiSpeech Dilated TCN + BiLSTM) | Static (`calibrated_postprocess_config.json`) | `0.5300` | `0.520512` |
 | **Run 2 (`anhtraiAI_2.zip`)** | `build_submission_v6.py` (`submission_v6.json`) | `0.70 Conformer (10ep) + 0.30 Decoupled Tri-Branch` | RMS-Adaptive Hysteresis | `0.7955` | `0.518264` |
-| **Run 3 (`anhtraiAI_3.zip`)** | `build_submission_v10.py` (`submission_v10.json`) | `0.60 Conformer Peak (25ep) + 0.20 Conformer-Pro + 0.20 Decoupled` | RMS-Adaptive Hysteresis | `0.8064` | `0.527469` |
-| **Run 4 (`anhtraiAI_4.zip`)** | `build_submission_v11.py` (`submission_v11.json`) | **`0.60 Dual Conformer (2048-d) + 0.40 Conformer Peak (25ep)`** | **Static Per-Class Hysteresis** | `0.8180` | **`0.530786` (Best)** |
-| **Run 5 (`anhtraiAI_5.zip`)** | `build_submission_v12.py` (`submission_v12.json`) | `0.50 Dual + 0.25 Peak + 0.15 Conformer-Pro + 0.10 Decoupled` | Static Per-Class Hysteresis | `0.8229` | `0.524252` |
+| **Run 3 (`anhtraiAI_3.zip`)** | `build_submission_v10.py` (`submission_v10.json`) | `0.60 Conformer Peak (25ep) + 0.20 Conformer-Pro + 0.20 Decoupled` | RMS-Adaptive Hysteresis | `0.8064` | `0.527468` |
+| **Run 4 (`anhtraiAI_4.zip`)** | `build_submission_v11.py` (`submission_v11.json`) | **`0.60 Dual Conformer (2048-d) + 0.40 Conformer Peak (25ep)`** | **Static Per-Class Hysteresis** | `0.8180` | **`0.530785` (Best)** |
+| **Run 5 (`anhtraiAI_5.zip`)** | `build_submission_v12.py` (`submission_v12.json`) | `0.50 Dual + 0.25 Peak + 0.15 Conformer-Pro + 0.10 Decoupled` | Static Per-Class Hysteresis | `0.8229` | `0.524251` |
 
 ---
 
