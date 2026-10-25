@@ -199,12 +199,10 @@ def plot_temporal_localization():
         ax_bar.add_patch(rect)
         ax_bar.text((s + e)/2, 0.5, f"Distortion [{s:.2f}s - {e:.2f}s]", ha='center', va='center', color='white', fontsize=7.5, fontweight='bold', zorder=4)
 
-    # IoU annotation
-    s_gt, e_gt = gt_dist[0]
-    s_pred, e_pred = pred_dist[0]
-    inter = max(0, min(e_gt, e_pred) - max(s_gt, s_pred))
-    union = max(e_gt, e_pred) - min(s_gt, s_pred)
-    clip_iou = inter / union
+    # IoU annotation (using displayed 2-decimal rounded interval bounds for exact arithmetic consistency with paper text and caption)
+    s_gt_r, e_gt_r = round(gt_dist[0][0], 2), round(gt_dist[0][1], 2)
+    s_pred_r, e_pred_r = round(pred_dist[0][0], 2), round(pred_dist[0][1], 2)
+    clip_iou = (min(e_gt_r, e_pred_r) - max(s_gt_r, s_pred_r)) / (max(e_gt_r, e_pred_r) - min(s_gt_r, s_pred_r))
     ax_bar.text(dur - 0.05, 2.1, f"Clip Distortion IoU = {clip_iou*100:.1f}%", ha='right', va='center', fontsize=8.5, fontweight='bold', color='#0D47A1', bbox=dict(boxstyle='round,pad=0.3', facecolor='#E3F2FD', edgecolor='#90CAF9'))
 
     ax_bar.grid(True, axis='x', linestyle=':', alpha=0.5)
