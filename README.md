@@ -194,7 +194,7 @@ python scripts/compute_ensemble_new_thao.py
 # 4. Evaluate fault localization on Vietnamese Dev Benchmark (125 clips, Table 2)
 python scripts/benchmark_gold_test_set.py
 
-# 5. Evaluate all official submissions on Private Test Set (302 clips, Tables 3, 4, 6; Table 7 reports oracle diagnostic ablations)
+# 5. Evaluate all official submissions on Private Test Set (302 clips, Tables 3, 4, 6). Table 7 (post-competition oracle diagnostics) is printed from reported values: the experiments that produced it are not included in this repository.
 python scripts/evaluate_official_submissions.py
 
 # 6. Compare single models vs. ensemble on Private Test Set (Table 5)
