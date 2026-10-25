@@ -205,6 +205,8 @@ python scripts/build_submission_v11.py
 python scripts/package_submission.py --team-name anhtraiAI --attempt 4 --submission-json submissions/submission_v11.json
 ```
 
+> **Note on Submission Reproducibility**: The codebase in `src/sqa/postprocess.py` includes a deterministic IEEE-754 float precision fix (`round(s - merged[-1][1], 6) < merge_gap` and `(e - s) >= min_duration - 1e-6`) to prevent compiler-dependent sub-millisecond precision artifacts on 40 ms boundary checks. The exact competition submissions evaluated on the official portal are preserved unmodified in `submissions/`.
+
 ---
 
 ## 6. License & Data Terms
