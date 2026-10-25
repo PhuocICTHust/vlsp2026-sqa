@@ -83,7 +83,7 @@ def normalize_intervals(
     for s, e in iv:
         if merged and s <= merged[-1][1]:
             merged[-1][1] = max(merged[-1][1], e)
-        elif merged and merge_gap > 0 and (s - merged[-1][1]) < merge_gap:
+        elif merged and merge_gap > 0 and round(s - merged[-1][1], 6) < merge_gap:
             merged[-1][1] = e
         else:
             merged.append([s, e])

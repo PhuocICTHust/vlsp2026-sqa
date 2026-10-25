@@ -143,7 +143,7 @@ vlsp2026-sqa/
 git clone https://github.com/PhuocICTHust/vlsp2026-sqa.git
 cd vlsp2026-sqa
 
-conda create -n vlsp2026-sqa python=3.10 -y
+conda create -n vlsp2026-sqa python=3.11 -y
 conda activate vlsp2026-sqa
 
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
@@ -223,7 +223,7 @@ python scripts/package_submission.py --team-name anhtraiAI --attempt 4 --submiss
 @inproceedings{pham2026crossbackbone,
   title     = {A Cross-Backbone Dual-Stream Framework for Vietnamese Speech Quality Assessment and Temporal Fault Localization},
   author    = {Pham, Phuoc Duc and Vu, Thao Do Minh and Nguyen, Dat Tien and Tran, Hieu Trung and Le, Kien Hoang and Nguyen, Hoang Duc and Nguyen, Nhat Tran Minh and Nguyen, Dien Huy and Nguyen, Thang Duc},
-  booktitle = {Proceedings of the 13th International Conference on Vietnamese Language and Speech Processing (VLSP 2026)},
+  booktitle = {Proceedings of the 13th International Workshop on Vietnamese Language and Speech Processing (VLSP 2026)},
   year      = {2026}
 }
 ```

@@ -1,6 +1,6 @@
 """Submission generator for Official Run 4 (anhtraiAI_4.zip / submission_v11.json).
 Vietnamese Synthetic Dev Set (125 clips) Fault Avg: 87.49% (per-run) / 87.01% (shared), Composite Dev Score: 0.8180.
-Official Private Test Final Score: 0.530786 (Best Run).
+Official Private Test Final Score: 0.530785 (Best Run).
 """
 
 import json
@@ -50,7 +50,7 @@ def load_audio_mono(audio_path: Path, target_sr: int = 16000) -> tuple[torch.Ten
 
 def main():
     print("=" * 80)
-    print("BUILDING OFFICIAL RUN 4 (anhtraiAI_4 / submission_v11.json) - 0.8180 COMPOSITE DEV / 0.530786 PRIVATE TEST")
+    print("BUILDING OFFICIAL RUN 4 (anhtraiAI_4 / submission_v11.json) - 0.8180 COMPOSITE DEV / 0.530785 PRIVATE TEST")
     print("=" * 80)
     print(f"Device: {DEVICE}")
 

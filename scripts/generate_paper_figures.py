@@ -63,8 +63,8 @@ def plot_architecture():
 
     # 2. Dual Foundation Backbones
     draw_arrow(14.5, 25, 19, 25)
-    draw_box(19, 28, 20, 14, c_blue, c_blue_b, "Microsoft WavLM-Large", "1024-d Denoising Latents\n(24 Layers, 316M Params)")
-    draw_box(19, 8, 20, 14, c_blue, c_blue_b, "Meta XLS-R-300M", "1024-d Phonetic Latents\n(128 Languages, 317M Params)")
+    draw_box(19, 28, 20, 14, c_blue, c_blue_b, "Microsoft WavLM-Large", "1024-d Denoising Latents\n(Frozen 24 Layers, 316M)")
+    draw_box(19, 8, 20, 14, c_blue, c_blue_b, "Meta XLS-R-300M", "1024-d Phonetic Latents\n(Frozen 128 Langs, 317M)")
 
     # Fused Latents Box
     draw_arrow(39.5, 35, 43, 30)
@@ -73,13 +73,13 @@ def plot_architecture():
 
     # Branch A: SLSQP Tri-Ensemble MOS Head (Top)
     draw_arrow(39.5, 38, 59, 41)
-    draw_box(59, 36, 23, 11, c_green, c_green_b, "SLSQP Tri-Ensemble MOS Head", "• WavLM LoRA ($w_1=0.247$)\n• Frozen WavLM ASP ($w_2=0.364$)\n• XLS-R-300M ASP ($w_3=0.389$)")
+    draw_box(59, 36, 23, 11, c_green, c_green_b, "SLSQP Tri-Ensemble MOS Head", "- WavLM LoRA ($w_1=0.247$)\n- Frozen WavLM ASP ($w_2=0.364$)\n- XLS-R-300M ASP ($w_3=0.389$)")
     draw_arrow(82.5, 41.5, 87, 41.5)
     draw_box(87, 37.5, 11, 8, '#C8E6C9', c_green_b, "Quality Score", r"$\hat{Q} \in [1.0, 5.0]$")
 
     # Branch B: Temporal Fault Localization Ensemble (Bottom)
     draw_arrow(56.5, 25, 59, 20)
-    draw_box(59, 5, 23, 25, c_orange, c_orange_b, "Complementary Fault Decoders", "• Dual Conformer (2048-d, k=15)\n• Conformer Peak (1024-d, 25ep)\n• Conformer-Pro (k=5, 15, 31)\n• Decoupled Tri-Branch (TCN+LSTM)\nLoss: Focal + 0.5 Soft-IoU + 0.2 Presence")
+    draw_box(59, 5, 23, 25, c_orange, c_orange_b, "Complementary Fault Decoders", "- Dual Conformer (2048-d, k=15)\n- Conformer Peak (1024-d, 25ep)\n- Conformer-Pro (k=5, 15, 31)\n- Decoupled Tri-Branch (TCN+LSTM)\nLoss: Focal + 0.5 Soft-IoU + 0.2 Presence")
 
     draw_arrow(82.5, 17.5, 87, 17.5)
     draw_box(87, 12, 11, 11, '#FFE0B2', c_orange_b, "Fault Intervals", "Noise, Distortion, Pause\n(Two-Tier Hysteresis)")

@@ -44,7 +44,7 @@ from sqa.postprocess import PostProcessConfig, predict_fault_type, serialize_int
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 GT_PATH = ROOT / "data" / "private_test_ground_truth.json"
 AUDIO_DIR = ROOT / "data" / "private_test" / "audio"
-OFFICIAL_PCC_MOS = 0.703140
+OFFICIAL_PCC_MOS = 0.703139
 
 
 def main():
