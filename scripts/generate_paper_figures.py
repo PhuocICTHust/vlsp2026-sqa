@@ -213,12 +213,12 @@ def plot_temporal_localization():
     print("Generated paper/fig_temporal_localization.pdf and .png")
 
 if __name__ == '__main__':
-    # Preserve modern draw.io architecture diagram if fig_architecture.drawio exists
-    drawio_file = Path('paper/fig_architecture.drawio')
-    if not drawio_file.exists():
+    # Always preserve high-resolution publication architecture diagram (paper/fig_architecture.pdf / .png)
+    arch_pdf = Path('paper/fig_architecture.pdf')
+    if not arch_pdf.exists():
         plot_architecture()
     else:
-        print("Preserving high-resolution draw.io architecture diagram (paper/fig_architecture.pdf / .png)")
+        print("Preserving high-resolution architecture diagram (paper/fig_architecture.pdf / .png)")
 
     plot_mos_scatter()
     plot_temporal_localization()
