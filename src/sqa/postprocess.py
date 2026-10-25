@@ -88,7 +88,7 @@ def normalize_intervals(
         else:
             merged.append([s, e])
 
-    merged = [[s, e] for s, e in merged if (e - s) >= min_duration]
+    merged = [[s, e] for s, e in merged if (e - s) >= (min_duration - 1e-6)]
     if round_digits is None:
         return merged
     return [[round(s, round_digits), round(e, round_digits)] for s, e in merged]

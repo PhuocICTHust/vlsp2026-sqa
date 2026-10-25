@@ -79,10 +79,10 @@ def plot_architecture():
 
     # Branch B: Temporal Fault Localization Ensemble (Bottom)
     draw_arrow(56.5, 25, 59, 20)
-    draw_box(59, 5, 23, 25, c_orange, c_orange_b, "Heterogeneous Fault Decoders", "• Dual Conformer (2048-d, k=15)\n• Conformer Peak (1024-d, 25ep)\n• Conformer-Pro (k=5, 15, 31)\n• Decoupled Tri-Branch (TCN+LSTM)\nLoss: Focal + 0.5 Soft-IoU + Presence")
+    draw_box(59, 5, 23, 25, c_orange, c_orange_b, "Complementary Fault Decoders", "• Dual Conformer (2048-d, k=15)\n• Conformer Peak (1024-d, 25ep)\n• Conformer-Pro (k=5, 15, 31)\n• Decoupled Tri-Branch (TCN+LSTM)\nLoss: Focal + 0.5 Soft-IoU + 0.2 Presence")
 
     draw_arrow(82.5, 17.5, 87, 17.5)
-    draw_box(87, 12, 11, 11, '#FFE0B2', c_orange_b, "Fault Intervals", r"$\mathcal{I}_{\text{noise}}, \mathcal{I}_{\text{dist}}, \mathcal{I}_{\text{pause}}$" + "\n(Hysteresis $\tau_{\text{high}}, \tau_{\text{low}}$)")
+    draw_box(87, 12, 11, 11, '#FFE0B2', c_orange_b, "Fault Intervals", "Noise, Distortion, Pause\n(Two-Tier Hysteresis)")
 
     plt.tight_layout()
     plt.savefig('paper/fig_architecture.pdf', bbox_inches='tight')

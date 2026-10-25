@@ -163,16 +163,16 @@ After downloading, extract the archive into `outputs/fault_head_v5/` and verify 
 mkdir -p outputs/fault_head_v5
 unzip checkpoints_official_runs_2_to_5.zip -d outputs/fault_head_v5/
 
-# Verify SHA256 integrity against checkpoints_manifest.json
-python scripts/checkpoint_manifest.py --verify
+# Verify SHA256 integrity for the fault localization checkpoints
+python scripts/checkpoint_manifest.py --verify --group runs_2_to_5_fault_heads
 ```
 
 The archive contains:
-* `conformer_10epochs.pt` (used in Run 2)
-* `conformer_25epochs_peak.pt` (used in Runs 3, 4, 5)
-* `conformer_pro_multiscale.pt` (used in Runs 3, 5)
-* `decoupled_fault_head.pt` (used in Runs 2, 3, 5)
-* `dual_backbone_conformer.pt` (used in Runs 4, 5)
+* `best_conformer_fault_head.pt` (10-epoch Conformer, used in Run 2)
+* `best_conformer_25ep.pt` (25-epoch Conformer Peak, used in Runs 3, 4, 5)
+* `best_conformer_pro.pt` (Multi-scale Conformer-Pro, used in Runs 3, 5)
+* `best_decoupled_fault_head.pt` (Decoupled Tri-Branch, used in Runs 2, 3, 5)
+* `best_dual_backbone_conformer.pt` (Cross-Backbone Dual Conformer, used in Runs 4, 5)
 
 ### Reproducing Feature Caching, Training, and Official Submissions
 ```bash
@@ -194,7 +194,7 @@ python scripts/compute_ensemble_new_thao.py
 # 4. Evaluate fault localization on Vietnamese Dev Benchmark (125 clips, Table 2)
 python scripts/benchmark_gold_test_set.py
 
-# 5. Evaluate all official submissions on Private Test Set (302 clips, Tables 3, 4, 6, 7)
+# 5. Evaluate all official submissions on Private Test Set (302 clips, Tables 3, 4, 6; Table 7 reports oracle diagnostic ablations)
 python scripts/evaluate_official_submissions.py
 
 # 6. Compare single models vs. ensemble on Private Test Set (Table 5)

@@ -72,10 +72,11 @@ def write_manifest() -> None:
     print(f"wrote {MANIFEST}")
 
 
-def verify_manifest() -> int:
+def verify_manifest(group_filter: str | None = None) -> int:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     bad = 0
-    for group, items in manifest["artifacts"].items():
+    groups_to_check = {group_filter: manifest["artifacts"][group_filter]} if group_filter else manifest["artifacts"]
+    for group, items in groups_to_check.items():
         for it in items:
             p = ROOT / it["path"]
             if not p.exists():
@@ -86,26 +87,30 @@ def verify_manifest() -> int:
                 bad += 1
             else:
                 print(f"OK       [{group}] {it['path']}")
-    for name, digest in manifest.get("official_submission_json_sha256", {}).items():
-        zp = ROOT / "submissions" / f"{name}.zip"
-        if zp.exists():
-            with zipfile.ZipFile(zp) as z:
-                ok = hashlib.sha256(z.read("submission.json")).hexdigest() == digest
-            print(f"{'OK      ' if ok else 'MISMATCH'} [official] {name}.zip -> submission.json")
-            bad += 0 if ok else 1
+    if group_filter is None:
+        for name, digest in manifest.get("official_submission_json_sha256", {}).items():
+            zp = ROOT / "submissions" / f"{name}.zip"
+            if zp.exists():
+                with zipfile.ZipFile(zp) as z:
+                    ok = hashlib.sha256(z.read("submission.json")).hexdigest() == digest
+                print(f"{'OK      ' if ok else 'MISMATCH'} [official] {name}.zip -> submission.json")
+                bad += 0 if ok else 1
     return 1 if bad else 0
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--write", action="store_true")
-    g.add_argument("--verify", action="store_true")
+    ap.add_argument("--write", action="store_true", help="write manifest from local files")
+    ap.add_argument("--verify", action="store_true", help="verify local files against manifest")
+    ap.add_argument("--group", type=str, default=None, help="limit verification to a specific artifact group")
     args = ap.parse_args()
+
     if args.write:
         write_manifest()
-    else:
-        sys.exit(verify_manifest())
+        return
+    if args.verify:
+        sys.exit(verify_manifest(args.group))
+    ap.print_help()
 
 
 if __name__ == "__main__":
