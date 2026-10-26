@@ -31,17 +31,10 @@ sample_audio/
 *.ckpt
 *.npz
 
-# Personal documents and local Label Studio state
-/Document/
-/document/
-/label_studio/ls_data/
-
 # Outputs & archives
 outputs/
 submissions/
 review_packs/
-reports/*.html
-reports/*.csv
 *.zip
 
 # OS

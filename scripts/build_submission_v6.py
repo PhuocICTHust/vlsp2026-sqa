@@ -132,6 +132,7 @@ def main():
                     use_hysteresis=True,
                     min_duration=c["md"],
                     merge_gap=0.04,
+                    legacy_competition_mode=True,
                 )
                 ivs, _, _, _ = predict_fault_type(prob_ens[:, c_idx], MODEL_GRID, dur, post_cfg)
                 clip_faults[ft] = serialize_intervals(ivs, round_digits=2, duration=dur)

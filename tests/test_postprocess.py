@@ -232,3 +232,14 @@ def test_resolve_config_per_fault_type():
     assert resolve_config(BASELINE_POSTPROCESS, "noise") is BASELINE_POSTPROCESS
     with pytest.raises(KeyError):
         resolve_config({"noise": noise_cfg}, "distortion")
+
+def test_legacy_competition_mode_reproduces_raw_float_semantics():
+    # Gap of 0.04 where 0.06 - 0.02 = 0.039999999999999994 < 0.04 in raw float
+    # In legacy competition mode, it merges (< 0.04 is True).
+    # In clean mode, round(0.06 - 0.02, 6) == 0.04 which is NOT < 0.04 (does not merge).
+    iv = [[0.0, 0.02], [0.06, 0.10]]
+    out_clean = normalize_intervals(iv, duration=1.0, merge_gap=0.04, legacy_competition_mode=False)
+    out_legacy = normalize_intervals(iv, duration=1.0, merge_gap=0.04, legacy_competition_mode=True)
+    assert len(out_clean) == 2
+    assert len(out_legacy) == 1
+    assert out_legacy == [[0.0, 0.10]]

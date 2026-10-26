@@ -1147,7 +1147,7 @@ def cmd_generate(args) -> None:
             k += 1
             fl = {f: serialize(normalize_intervals([[e.start, e.end] for e in events if e.fault == f], dur), dur)
                   for f in FAULTS}
-            # quality_score (MOS) is NOT produced here: it is Hieu's part, computed from params.jsonl
+            # quality_score (MOS) is computed downstream from params.jsonl
             f_lab.write(json.dumps({"file_id": fid, "faults": fl},
                                    ensure_ascii=False, default=_json_default) + "\n")
             f_par.write(json.dumps({

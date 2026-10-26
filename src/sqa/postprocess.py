@@ -25,6 +25,7 @@ class PostProcessConfig:
     tau_peak_min: float = 0.3
     peak_half_window_sec: float = 0.15
     use_hysteresis: bool = False
+    legacy_competition_mode: bool = False
 
     def __post_init__(self):
         for name in ("tau_frame", "tau_presence", "tau_low", "tau_peak_min"):
@@ -74,6 +75,7 @@ def normalize_intervals(
     merge_gap: float = 0.0,
     min_duration: float = 0.0,
     round_digits: int | None = None,
+    legacy_competition_mode: bool = False,
 ) -> list[list[float]]:
     iv = [[float(s), float(e)] for s, e in intervals if float(s) < float(e)]
     iv = [[max(0.0, s), min(duration, e)] for s, e in iv if max(0.0, s) < min(duration, e)]
@@ -83,12 +85,18 @@ def normalize_intervals(
     for s, e in iv:
         if merged and s <= merged[-1][1]:
             merged[-1][1] = max(merged[-1][1], e)
-        elif merged and merge_gap > 0 and round(s - merged[-1][1], 6) < merge_gap:
+        elif merged and merge_gap > 0 and (
+            (s - merged[-1][1]) < merge_gap if legacy_competition_mode else round(s - merged[-1][1], 6) < merge_gap
+        ):
             merged[-1][1] = e
         else:
             merged.append([s, e])
 
-    merged = [[s, e] for s, e in merged if (e - s) >= (min_duration - 1e-6)]
+    if legacy_competition_mode:
+        merged = [[s, e] for s, e in merged if (e - s) >= min_duration]
+    else:
+        merged = [[s, e] for s, e in merged if (e - s) >= (min_duration - 1e-6)]
+
     if round_digits is None:
         return merged
     return [[round(s, round_digits), round(e, round_digits)] for s, e in merged]
@@ -155,6 +163,7 @@ def frame_probs_to_intervals(
     min_duration: float = 0.0,
     merge_gap: float = 0.0,
     tau_low: float | None = None,
+    legacy_competition_mode: bool = False,
 ) -> list[list[float]]:
     if duration is None:
         duration = len(probs) * grid.frame_hop_sec + grid.offset_sec
@@ -185,7 +194,13 @@ def frame_probs_to_intervals(
         ]
         for s, e in runs
     ]
-    return normalize_intervals(raw, duration=duration, merge_gap=merge_gap, min_duration=min_duration)
+    return normalize_intervals(
+        raw,
+        duration=duration,
+        merge_gap=merge_gap,
+        min_duration=min_duration,
+        legacy_competition_mode=legacy_competition_mode,
+    )
 
 
 def predict_fault_type(
@@ -228,6 +243,7 @@ def predict_fault_type(
                 min_duration=min_duration,
                 merge_gap=config.merge_gap,
                 tau_low=hyst_tau_low,
+                legacy_competition_mode=config.legacy_competition_mode,
             )
         )
         if intervals:

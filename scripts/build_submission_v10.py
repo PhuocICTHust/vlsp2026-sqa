@@ -124,6 +124,7 @@ def main():
                     use_hysteresis=True,
                     min_duration=c["md"],
                     merge_gap=0.04,
+                    legacy_competition_mode=True,
                 )
                 ivs, _, _, _ = predict_fault_type(probs_ens[:, c_idx], MODEL_GRID, dur, post_cfg)
                 clip_faults[ft] = serialize_intervals(ivs, round_digits=2, duration=dur)
@@ -140,6 +141,7 @@ def main():
                 print(f"Processed {i:3d}/{len(wav_files)} files...")
 
     final_submissions.sort(key=lambda x: x["file_id"])
+    OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT_JSON, "w", encoding="utf-8") as f:
         json.dump(final_submissions, f, indent=2, ensure_ascii=False)
 

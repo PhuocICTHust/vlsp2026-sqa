@@ -88,9 +88,9 @@ def main():
     for p in xlsr_bb.parameters(): p.requires_grad = False
 
     cfgs = {
-        "noise": PostProcessConfig(tau_frame=0.45, tau_low=0.25, use_hysteresis=True, min_duration=0.08, merge_gap=0.04),
-        "distortion": PostProcessConfig(tau_frame=0.55, tau_low=0.25, use_hysteresis=True, min_duration=0.00, merge_gap=0.04),
-        "unnatural_pause": PostProcessConfig(tau_frame=0.55, tau_low=0.20, use_hysteresis=True, min_duration=0.08, merge_gap=0.04),
+        "noise": PostProcessConfig(tau_frame=0.45, tau_low=0.25, use_hysteresis=True, min_duration=0.08, merge_gap=0.04, legacy_competition_mode=True),
+        "distortion": PostProcessConfig(tau_frame=0.55, tau_low=0.25, use_hysteresis=True, min_duration=0.00, merge_gap=0.04, legacy_competition_mode=True),
+        "unnatural_pause": PostProcessConfig(tau_frame=0.55, tau_low=0.20, use_hysteresis=True, min_duration=0.08, merge_gap=0.04, legacy_competition_mode=True),
     }
 
     wav_files = sorted(list(AUDIO_DIR.glob("*.wav")))
@@ -139,6 +139,7 @@ def main():
                 print(f"Processed {i:3d}/{len(wav_files)} files...")
 
     final_submissions.sort(key=lambda x: x["file_id"])
+    OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT_JSON, "w", encoding="utf-8") as f:
         json.dump(final_submissions, f, indent=2, ensure_ascii=False)
 
